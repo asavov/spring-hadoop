@@ -5,4 +5,6 @@ public interface Jumpable {
 
     void jump();
 
+    String getFriendlyName();
+
 }
