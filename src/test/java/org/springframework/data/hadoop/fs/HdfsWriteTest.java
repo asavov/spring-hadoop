@@ -19,12 +19,15 @@ import static org.apache.commons.io.FilenameUtils.EXTENSION_SEPARATOR;
 import static org.apache.commons.io.FilenameUtils.getExtension;
 import static org.apache.commons.io.FilenameUtils.removeExtension;
 import static org.junit.Assert.assertTrue;
+
+import java.io.IOException;
+
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.io.compress.BZip2Codec;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.io.compress.GzipCodec;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,8 +37,8 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 /**
- * Integration test for {@link HdfsWrite} testing simple and compressed writes of a
- * file to HDFS.
+ * Integration test for {@link HdfsWrite} testing simple and compressed writes of a file
+ * to HDFS.
  *
  * @author Alex Savov
  */
@@ -43,117 +46,152 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 @ContextConfiguration
 public class HdfsWriteTest {
 
-    /* The instance under testing. */
-    @Autowired
-    private HdfsWrite hdfs;
+	/* The instance under testing. */
+	@Autowired
+	private HdfsWrite hdfs;
 
-    @Value("classpath:/data/apache-short.txt")
-    private Resource source;
+	@Value("classpath:/data/apache-short.txt")
+	private Resource source;
 
-    @Autowired
-    private HdfsResourceLoader hdfsLoader;
+	@Autowired
+	private HdfsResourceLoader hdfsLoader;
 
-    @Autowired
-    private Configuration config;
+	@Autowired
+	private Configuration config;
 
-    /**
-     * Test simple write from source to destionation.
-     */
-    @Test
-    public void testWriteSimple() throws Exception {
+	/**
+	 * Test simple write from source to destionation.
+	 */
+	@Test
+	public void testWriteSimple() throws Exception {
 
-        final String destination = destination();
+		final String destination = destination();
 
-        hdfs.write(source, destination);
+		hdfs.write(source, destination);
 
-        assertHdfsFileExists(destination);
-    }
+		assertHdfsFileExists(destination);
+	}
 
-    /**
-     * Test compressed write from source to destionation using codec alias as configured
-     * within Hadoop.
-     */
-    @Test
-    public void testWriteCompressedUsingHadoopCodecAlias() throws Exception {
+	/**
+	 * Test compressed write from source to destionation using codec alias as configured
+	 * within Hadoop.
+	 */
+	@Test
+	public void testWriteCompressedUsingHadoopCodecAlias() throws IOException {
 
-        // DefaultCodec is configured by Hadoop by default
-        final CompressionCodec codec = new CompressionCodecFactory(config).getCodecByName(DefaultCodec.class
-                .getSimpleName());
+		// DefaultCodec is configured by Hadoop by default
+		final CompressionCodec codec = new CompressionCodecFactory(config).getCodecByName(DefaultCodec.class
+				.getSimpleName());
 
-        testWriteCompressed(codec, /* useCodecAlias */true);
-    }
+		testWriteCompressed(codec, /* useCodecAlias */true);
+	}
 
-    /**
-     * Test compressed write from source to destionation using codec class name as
-     * configured within Hadoop.
-     */
-    @Test
-    public void testWriteCompressedUsingHadoopCodecClassName() throws Exception {
+	/**
+	 * Test compressed write from source to destionation using codec class name as
+	 * configured within Hadoop.
+	 */
+	@Test
+	public void testWriteCompressedUsingHadoopCodecClassName() throws IOException {
 
-        // GzipCodec is configured by Hadoop by default
-        final CompressionCodec codec = new CompressionCodecFactory(config).getCodecByName(GzipCodec.class
-                .getSimpleName());
+		// GzipCodec is configured by Hadoop by default
+		final CompressionCodec codec = new CompressionCodecFactory(config).getCodecByName(GzipCodec.class
+				.getSimpleName());
 
-        testWriteCompressed(codec, /* useCodecAlias */false);
-    }
+		testWriteCompressed(codec, /* useCodecAlias */false);
+	}
 
-    /**
-     * Test compressed write from source to destionation using user provided codec loaded
-     * from the classpath.
-     */
-    @Test
-    public void testWriteCompressedUsingUserCodecClassName() throws Exception {
+	/**
+	 * Test compressed write against ALL codecs supported by Hadoop.
+	 */
+	@Test
+	public void testWriteCompressedUsingHadoopCodecs() {
+		/*
+		 * TODO: Needs to be re-worked to support parameterized tests.
+		 * See @Parameterized and Parameterized.Parameters
+		 */
 
-        // BZip2Codec is NOT configured by Hadoop by default, although it's present on
-        // the classpath
-        final CompressionCodec codec = new BZip2Codec();
+		final StringBuilder exceptions = new StringBuilder();
 
-        // NOTE: I got "native library not loaded" when tried with Snappy/Lzop codec
-        // cause I'm running on Windows, and it relies on Linux native library and
-        // requires Hadoop native library support.
-        // @Costin: If the build is running on Linux we might add those codecs too :)
+		// Get a list of all codecs supported by Hadoop
+		for (Class<? extends CompressionCodec> codecClass : CompressionCodecFactory.getCodecClasses(config)) {
+			try {
+				testWriteCompressed(ReflectionUtils.newInstance(codecClass, config), /* useCodecAlias */true);
+			} catch (Exception exc) {
+				exceptions.append(codecClass.getName() + " not supported. Details: " + exc.getMessage() + "\n");
+			}
+		}
 
-        testWriteCompressed(codec, /* useCodecAlias */false);
-    }
+		assertTrue(exceptions.toString(), exceptions.length() == 0);
+	}
 
-    /**
-     * Core compressed write test logic.
-     */
-    private void testWriteCompressed(CompressionCodec codec, boolean useAlias) throws Exception {
+	/**
+	 * Test compressed write from source to destionation using user provided codec loaded
+	 * from the classpath.
+	 */
+	@Test
+	public void testWriteCompressedUsingUserCodecClassName() throws IOException {
 
-        // calculates the destination from the source. adds timestamp to the destination
-        // file name.
-        final String destination = destination();
+		// CustomCompressionCodec is NOT supported by Hadoop, but is provided by the
+		// client on the classpath
+		final CompressionCodec codec = new CustomCompressionCodec();
 
-        final String codecAlias = useAlias ? codec.getClass().getSimpleName() : codec.getClass().getName();
+		testWriteCompressed(codec, /* useCodecAlias */false);
+	}
 
-        // do the write.
-        hdfs.write(source, destination, codecAlias);
+	/**
+	 * Tests core compressed write logic. Although a codec is being passed as a parameter
+	 * the method under testing is {@link HdfsWrite#write(Resource, String, String)}.
+	 *
+	 * @param codec Used ONLY to get codec extension and its class name or alias in a
+	 *            type-safe manner.
+	 * @param useAlias If <code>true</code> uses
+	 *            <code>codec.getClass().getSimpleName()</code> as a codec alias.
+	 *            Otherwise uses <code>codec.getClass().getName()</code> as a codec class
+	 *            name.
+	 */
+	private void testWriteCompressed(CompressionCodec codec, boolean useAlias) throws IOException {
 
-        // expected destination on hdfs should have codec extension appended
-        assertHdfsFileExists(destination + codec.getDefaultExtension());
-    }
+		// calculates the destination from the source.
+		final String destination = destination();
 
-    /**
-     * @return Hdfs file destionation calculated from the source. The file name is
-     *         appended with the timestamp. The extension is kept the same.
-     */
-    private String destination() {
+		final String codecAlias = useAlias ? codec.getClass().getSimpleName() : codec.getClass().getName();
 
-        String destination = "/user/alex/files/_I_";
+		// do the compressed write.
+		hdfs.write(source, destination, codecAlias);
 
-        // add file name
-        destination += removeExtension(source.getFilename());
-        // add time stamp
-        destination += "_" + System.currentTimeMillis();
-        // add file extension
-        destination += EXTENSION_SEPARATOR + getExtension(source.getFilename());
+		// expected destination on hdfs should have codec extension appended
+		assertHdfsFileExists(destination + codec.getDefaultExtension());
+	}
 
-        return destination;
-    }
+	/**
+	 * @return Hdfs file destionation calculated from the source. The file name is
+	 *         appended with the timestamp. The extension is kept the same.
+	 */
+	private String destination() {
 
-    private void assertHdfsFileExists(String hdfsFile) {
-        assertTrue("'" + hdfsFile + "' file is not present on HDFS.", hdfsLoader.getResource(hdfsFile).exists());
-    }
+		String destination = "/user/alex/files/";
+
+		// add file name
+		destination += removeExtension(source.getFilename());
+		// add time stamp
+		destination += "_" + System.currentTimeMillis();
+		// add file extension
+		destination += EXTENSION_SEPARATOR + getExtension(source.getFilename());
+
+		return destination;
+	}
+
+	private void assertHdfsFileExists(String hdfsFile) {
+		assertTrue("'" + hdfsFile + "' file is not present on HDFS.", hdfsLoader.getResource(hdfsFile).exists());
+	}
+
+	public static class CustomCompressionCodec extends DefaultCodec {
+
+		@Override
+		public String getDefaultExtension() {
+			return ".cusTom";
+		}
+
+	}
 
 }
