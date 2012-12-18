@@ -9,6 +9,6 @@
    <import resource="../hadoop-ctx.xml"/>
    
    <!-- The class under testing. -->
-   <bean id="hdfsWrite" class="org.springframework.data.hadoop.fs.HdfsWrite"/>
+   <bean id="hdfsWrite" class="org.springframework.data.hadoop.fs.HdfsWrite" scope="prototype"/>
 	
 </beans>

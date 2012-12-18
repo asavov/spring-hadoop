@@ -18,31 +18,43 @@ package org.springframework.data.hadoop.fs;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
+import org.apache.hadoop.io.serializer.JavaSerialization;
+import org.apache.hadoop.io.serializer.Serialization;
+import org.apache.hadoop.io.serializer.SerializationFactory;
+import org.apache.hadoop.io.serializer.WritableSerialization;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
+import org.springframework.util.StringUtils;
 
 /**
- * Utility class providing 'write into HDFS' functionality. It's supposed to be used
- * outside of Hadoop to move data into HDFS. Features supported:
+ * Utility class providing 'write into HDFS' functionality. It's supposed to be used outside of Hadoop to move data into
+ * HDFS. Features supported:
  * <ul>
  * <li>Write file: pass a source and HDFS destination and it writes the file into HDFS.</li>
- * <li>Write file with compression: pass a source, HDFS destination and a compression and
- * it writes the file into HDFS compressing its content on the fly.</li>
+ * <li>Write file with compression: pass a source, HDFS destination and a compression and it writes the file into HDFS
+ * compressing its content on the fly.</li>
  * </ul>
- *
+ * 
  * @author Alex Savov
  */
 // TODO: Update JavaDoc once we agree upon on the design.
 public class HdfsWrite {
+
+	static String SEQ_FILE_EXTENSION = ".seqfile";
 
 	@Autowired
 	private FileSystem fs;
@@ -53,51 +65,127 @@ public class HdfsWrite {
 	@Autowired
 	private HdfsResourceLoader hdfsResourceLoader;
 
+	private String codecAlias;
+
 	/**
-	 * Writes the content of source resource to the destination.    
+	 * @return the codecAlias
+	 */
+	public String getCodecAlias() {
+		return codecAlias;
+	}
+
+	/**
+	 * @param codecAlias Accepted values:
+	 * <ul>
+	 * <li>The short class name (without the package) of the compression codec that is specified within Hadoop
+	 * configuration (under <i>io.compression.codecs</i> prop). If the short class name ends with 'Codec', then there
+	 * are two aliases for the codec - the complete short class name and the short class name without the 'Codec'
+	 * ending. For example for the 'GzipCodec' codec class name the alias are 'gzip' and 'gzipcodec' (case insensitive).
+	 * If the codec is configured to be used by Hadoop this is the preferred way instead of passing the codec canonical
+	 * name.</li>
+	 * <li>The canonical class name of the compression codec that is specified within Hadoop configuration (under
+	 * <i>io.compression.codecs</i> prop) or is present on the classpath.</li>
+	 * </ul>
+	 */
+	public void setCodecAlias(String codecAlias) {
+		this.codecAlias = codecAlias;
+	}
+
+	/**
+	 * Writes the content of source resource to the destination.
 	 * 
 	 * @param source The source to read from.
 	 * @param destination The destination to write to.
-	 *
+	 * 
 	 * @throws IOException
 	 */
 	public void write(Resource source, String destination) throws IOException {
 
-		final InputStream is = source.getInputStream();
+		CompressionCodec codec = getCodec();
 
-		final HdfsResource hdfsResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
+		if (codec != null) {
+			if (!destination.toLowerCase().endsWith(codec.getDefaultExtension().toLowerCase())) {
+				destination += codec.getDefaultExtension();
+			}
+		}
+
+		InputStream is = source.getInputStream();
+
+		HdfsResource hdfsResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
 
 		// Open new HDFS file
-		final OutputStream os = hdfsResource.getOutputStream();
+		OutputStream os = hdfsResource.getOutputStream();
+
+		// Apply compression
+		if (codec != null) {
+			os = codec.createOutputStream(os);
+			// TODO: Eventually re-use underlying Compressor through CodecPool.
+		}
 
 		// Write source to HDFS destination
 		IOUtils.copyBytes(is, os, config, /* close */true);
 	}
 
 	/**
-	 * Writes the content of source resource to the destination applying compression on the fly.
+	 * Writes Java object to a HDFS sequence file at provided destination.
 	 * 
-	 * @param source The source to read from.
-	 * @param destination The destination to write to.
-	 * @param codecAlias Accepted values:
-	 *            <ul>
-	 *            <li>The short class name (without the package) of the compression codec
-	 *            that is specified within Hadoop configuration (under
-	 *            <i>io.compression.codecs</i> prop). If the short class name ends with
-	 *            'Codec', then there are two aliases for the codec - the complete short
-	 *            class name and the short class name without the 'Codec' ending. For
-	 *            example for the 'GzipCodec' codec class name the alias are 'gzip' and
-	 *            'gzipcodec' (case insensitive). If the codec is configured to be used
-	 *            by Hadoop this is the preferred way instead of passing the codec
-	 *            canonical name.</li>
-	 *            <li>The canonical class name of the compression codec that is specified
-	 *            within Hadoop configuration (under <i>io.compression.codecs</i> prop)
-	 *            or is present on the classpath.</li>
-	 *            </ul>
-	 *
+	 * The object is serialized based on its type by SequenceFiles pluggable serialization framework. Hadoop comes with
+	 * four serializers: Avro, Java, Tether and Writable (the default serializer).
+	 * 
+	 * @param object
+	 * @param destination
 	 * @throws IOException
+	 * 
+	 * @see {@link Serialization}
+	 * @see {@link SerializationFactory}
 	 */
-	public void write(Resource source, String destination, String codecAlias) throws IOException {
+	public <T> void write(Collection<? extends T> objects, Class<T> objectsClass, String destination)
+			throws IOException {
+
+		initSerializations();
+
+		if (!destination.toLowerCase().endsWith(SEQ_FILE_EXTENSION)) {
+			destination += SEQ_FILE_EXTENSION;
+		}
+
+		HdfsResource hdfsResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
+
+		CompressionCodec codec = getCodec();
+		
+		SequenceFile.Writer writer;
+		
+		if (codec != null) {
+			// TODO: @Costin
+			// The question here is: what's THE key value and class when writing pojos?
+			// Different serializations implies different class restrictions.
+			// Since we delegate serialization to underlying Hadoop Serializers we are not aware what key class to pass.
+			// About the value: we might autogenerate one or have a contract with the source object.
+			// So far use NullWritable :)
+			writer = SequenceFile.createWriter(fs, config, hdfsResource.getPath(), NullWritable.class,
+					objectsClass, SequenceFile.CompressionType.BLOCK, codec);			
+		} else {
+			writer = SequenceFile.createWriter(fs, config, hdfsResource.getPath(), NullWritable.class,
+							objectsClass, SequenceFile.CompressionType.NONE);			
+		}
+
+		try {
+			for (T object : objects) {
+				writer.append(NullWritable.get(), object);
+			}
+		} finally {
+			writer.close();
+		}
+	}
+
+	/**
+	 * @return The codec to be used to compress the data on the fly while storing it onto HDFS if the
+	 * <code>codecAlias</code> property is specified; <code>null</code> otherwise.
+	 */
+	private CompressionCodec getCodec() {
+
+		if (!StringUtils.hasText(codecAlias)) {
+			return null;
+		}
 
 		final CompressionCodecFactory codecFactory = new CompressionCodecFactory(config);
 
@@ -112,55 +200,30 @@ public class HdfsWrite {
 			// Instantiate codec and initialize it from configuration
 			// org.apache.hadoop.util.ReflectionUtils design is specific to Hadoop env :)
 			codec = (CompressionCodec) ReflectionUtils.newInstance(codecClass, config);
-
-			/*
-			 * NOTE: One of the overheads to using compression codecs is that they can be
-			 * expensive to create. Using the Hadoop ReflectionUtils class will result in
-			 * some of the reflection overhead associated with creating the instance
-			 * being cached in ReflectionUtils, which should speed up subsequent creation
-			 * of the codec. A better option would be to use the CompressionCodecFactory,
-			 * which provides caching of the codecs themselves.
-			 */
 		}
 
 		// TODO: Should we fall back to some default codec if not resolved?
+		return codec;
 
-		// Once CompressionCodec is resolved delegate to core method.
-		write(source, destination, codec);
 	}
 
 	/**
-	 * Writes the content of source resource to the destination applying compression on the fly.
+	 * Configure Hadoop to support WritableSerialization and JavaSerialization in addition to present ones.
 	 * 
-	 * @param source The source to read from.
-	 * @param destination The destination to write to.
-	 * @param codec The codec to be used to compress the data on the fly while storing it
-	 *            onto HDFS.
-	 *
-	 * @throws IOException
+	 * NOTE: Only WritableSerialization is supported by default.
 	 */
-	public void write(Resource source, String destination, CompressionCodec codec) throws IOException {
+	private void initSerializations() {
 
-		// TODO: Should we fall back to default codec (such as Snappy) if not passed?
-		Assert.notNull(codec);
+		final String HADOOP_IO_SERIALIZATIONS = "io.serializations";
 
-		final InputStream is = source.getInputStream();
+		String[] existing = (String[]) config.getStrings(HADOOP_IO_SERIALIZATIONS);
 
-		if (!destination.toLowerCase().endsWith(codec.getDefaultExtension().toLowerCase())) {
-			destination += codec.getDefaultExtension();
-		}
+		String[] serializations = { WritableSerialization.class.getCanonicalName(),
+				JavaSerialization.class.getCanonicalName() };
 
-		final HdfsResource hdfsResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
+		String[] merged = StringUtils.mergeStringArrays(existing, serializations);
 
-		// Open new HDFS file
-		OutputStream os = hdfsResource.getOutputStream();
-
-		// Apply compression
-		os = codec.createOutputStream(os);
-		// TODO: Eventually re-use underlying Compressor through CodecPool.
-
-		// Write source to HDFS destination
-		IOUtils.copyBytes(is, os, config, /* close */true);
+		config.set(HADOOP_IO_SERIALIZATIONS, StringUtils.arrayToCommaDelimitedString(merged));
 	}
 
 }
