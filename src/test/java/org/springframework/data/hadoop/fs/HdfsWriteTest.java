@@ -21,20 +21,27 @@ import static org.apache.commons.io.FilenameUtils.removeExtension;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.springframework.data.hadoop.fs.HdfsWrite.SerializationType.AVRO;
+import static org.springframework.data.hadoop.fs.HdfsWrite.SerializationType.JAVA;
+import static org.springframework.data.hadoop.fs.HdfsWrite.SerializationType.WRITABLE;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.Externalizable;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.avro.file.DataFileStream;
+import org.apache.avro.reflect.ReflectDatumReader;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Writable;
@@ -49,6 +56,7 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
+import org.springframework.data.hadoop.fs.HdfsWrite.SerializationType;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
@@ -66,7 +74,7 @@ public class HdfsWriteTest {
 	/*
 	 * The instance under testing.
 	 * 
-	 * A NEW instance (scope = prototype) is injected by Spring runner for each test execution. See
+	 * A NEW clean instance (scope = prototype) is injected by Spring runner for each test execution. See
 	 * HdfsWriteTest-context.xml file.
 	 */
 	@Autowired
@@ -115,39 +123,57 @@ public class HdfsWriteTest {
 	}
 
 	/**
-	 * Test write of single pojo using Writable serialization.
+	 * Test write of pojos collection using Writable serialization.
 	 */
 	@Test
-	public void testWriteToSeqFileWritable() throws Exception {
+	public void testWriteOfWritableToSeqFile() throws Exception {
 
-		testWriteToSeqFile(PojoWritable.class, /* compress */false);
+		testSerializationWrite(PojoWritable.class, WRITABLE, /* compress */false);
 	}
 
 	/**
-	 * Test compression write of single pojo using Writable serialization.
+	 * Test compression write of pojos collection using Writable serialization.
 	 */
 	@Test
-	public void testCompressedWriteToSeqFileWritable() throws Exception {
+	public void testCompressedWriteOfWritableToSeqFile() throws Exception {
 
-		testWriteToSeqFile(PojoWritable.class, /* compress */true);
+		testSerializationWrite(PojoWritable.class, WRITABLE, /* compress */true);
 	}
 
 	/**
-	 * Test write of collection of pojos using Java serialization.
+	 * Test write of pojos collection using Java serialization.
 	 */
 	@Test
-	public void testWriteToSeqFileSerializable() throws Exception {
+	public void testWriteOfSerializableToSeqFile() throws Exception {
 
-		testWriteToSeqFile(PojoSerializable.class, /* compress */false);
+		testSerializationWrite(PojoSerializable.class, JAVA, /* compress */false);
 	}
 
 	/**
-	 * Test compressed write of collection of pojos using Java serialization.
+	 * Test compressed write of pojos collection using Java serialization.
 	 */
 	@Test
-	public void testCompressedWriteToSeqFileSerializable() throws Exception {
+	public void testCompressedWriteOfSerializableToSeqFile() throws Exception {
 
-		testWriteToSeqFile(PojoSerializable.class, /* compress */true);
+		testSerializationWrite(PojoSerializable.class, JAVA, /* compress */true);
+	}
+
+	/**
+	 * Test write of pojos collection using Avro serialization.
+	 */
+	@Test
+	public void testWriteOfPojoToAvroFile() throws Exception {
+
+		testSerializationWrite(PojoSerializable.class, AVRO, /* compress */false);
+	}
+
+	/**
+	 * Test compression write of pojos collection using Avro serialization.
+	 */
+	@Test
+	public void testCompressedtestWriteOfPojoToAvroFile() throws Exception {
+
+		testSerializationWrite(PojoSerializable.class, AVRO, /* compress */true);
 	}
 
 	/**
@@ -260,18 +286,18 @@ public class HdfsWriteTest {
 	 * @return Hdfs file destination calculated from the source. The file name is appended with the timestamp. The
 	 * extension is kept the same.
 	 */
-	private String destination(Object javaObject, boolean compress) {
+	private String destination(Class<?> objectClass, SerializationType serialization, boolean compress) {
 
 		String destination = hdfsOutputDir;
 
 		// add file name
-		destination += javaObject.getClass().getSimpleName();
+		destination += objectClass.getSimpleName();
 		// add time stamp
 		destination += "_" + timestamp;
 		// add compression
 		destination += (compress ? "_compressed" : "");
-		// add SEQ file extension
-		destination += HdfsWrite.SEQ_FILE_EXTENSION;
+		// add file extension specific to used serialization
+		destination += serialization.getExtension();
 
 		return destination;
 	}
@@ -280,27 +306,31 @@ public class HdfsWriteTest {
 		assertTrue("'" + hdfsFile + "' file is not present on HDFS.", hdfsLoader.getResource(hdfsFile).exists());
 	}
 
-	@SuppressWarnings("unchecked")
-	private <T> void testWriteToSeqFile(Class<T> objectClass, boolean compress) throws Exception {
+	private <T> void testSerializationWrite(Class<T> objectClass, SerializationType serialization, boolean compress)
+			throws Exception {
 
-		List<T> javaObjects = new ArrayList<T>();
+		List<T> objects = new ArrayList<T>();
 
 		for (int i = 0; i < 5000; i++) {
-			javaObjects.add(objectClass.newInstance());
+			objects.add(objectClass.newInstance());
 		}
 
-		String destination = destination(javaObjects.get(0), compress);
+		String destination = destination(objectClass, serialization, compress);
+
+		hdfs.setSerialization(serialization);
 
 		if (compress) {
-			// Use default hadoop compression
-			hdfs.setCodecAlias(DefaultCodec.class.getSimpleName());
+			// Use default Hadoop compression also supported by Avro!
+			hdfs.setCodecAlias("deflate");
 		}
 
-		hdfs.write(javaObjects, (Class<T>) javaObjects.get(0).getClass(), destination);
+		hdfs.write(objects, objectClass, destination);
 
 		assertHdfsFileExists(destination);
 
-		assertEquals(javaObjects, readFromSeqFile(destination));
+		List<?> readObjects = serialization == AVRO ? readFromAvro(destination) : readFromSeqFile(destination);
+
+		assertEquals(objects, readObjects);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -322,7 +352,32 @@ public class HdfsWriteTest {
 			return objects;
 
 		} finally {
-			reader.close();
+			IOUtils.closeStream(reader);
+		}
+	}
+
+	private <T> List<T> readFromAvro(String destination) throws Exception {
+
+		DataFileStream<T> reader = null;
+		InputStream inputStream = null;
+		try {
+			HdfsResource hdfsResource = (HdfsResource) hdfsLoader.getResource(destination);
+
+			inputStream = hdfsResource.getInputStream();
+
+			reader = new DataFileStream<T>(inputStream, new ReflectDatumReader<T>());
+
+			List<T> objects = new ArrayList<T>();
+
+			for (T object : reader) {
+				objects.add(object);
+			}
+
+			return objects;
+
+		} finally {
+			IOUtils.closeStream(reader);
+			IOUtils.closeStream(inputStream);
 		}
 	}
 
@@ -338,9 +393,9 @@ public class HdfsWriteTest {
 
 		private static final long serialVersionUID = 4225081912489347353L;
 
-		static int id = 0;
+		private static int id = 0;
 
-		String name = "here goes Pojo's name (" + id + ")";
+		String name = "here goes Pojo's name (" + id++ + ")";
 
 		String description = "...and here goes Pojo's description :)";
 

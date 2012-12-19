@@ -20,6 +20,11 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Collection;
 
+import org.apache.avro.Schema;
+import org.apache.avro.file.CodecFactory;
+import org.apache.avro.file.DataFileWriter;
+import org.apache.avro.reflect.ReflectData;
+import org.apache.avro.reflect.ReflectDatumWriter;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.IOUtils;
@@ -51,7 +56,20 @@ import org.springframework.util.StringUtils;
 // TODO: Update JavaDoc once we agree upon on the design.
 public class HdfsWrite {
 
-	static String SEQ_FILE_EXTENSION = ".seqfile";
+	public static enum SerializationType {
+
+		AVRO(".avro"), JAVA(".seqfile"), WRITABLE(".seqfile");
+
+		private final String extension;
+
+		private SerializationType(String extension) {
+			this.extension = extension;
+		}
+
+		public String getExtension() {
+			return extension;
+		}
+	}
 
 	@Autowired
 	private FileSystem fs;
@@ -63,6 +81,22 @@ public class HdfsWrite {
 	private HdfsResourceLoader hdfsResourceLoader;
 
 	private String codecAlias;
+
+	private SerializationType serialization = SerializationType.JAVA;
+
+	/**
+	 * @return the serialization
+	 */
+	public SerializationType getSerialization() {
+		return serialization;
+	}
+
+	/**
+	 * @param serialization the serialization to set
+	 */
+	public void setSerialization(SerializationType serialization) {
+		this.serialization = serialization;
+	}
 
 	/**
 	 * @return the codecAlias
@@ -98,7 +132,7 @@ public class HdfsWrite {
 	 */
 	public void write(Resource source, String destination) throws IOException {
 
-		CompressionCodec codec = getCodec();
+		CompressionCodec codec = getHadoopCodec();
 
 		if (codec != null) {
 			if (!destination.toLowerCase().endsWith(codec.getDefaultExtension().toLowerCase())) {
@@ -106,21 +140,28 @@ public class HdfsWrite {
 			}
 		}
 
-		InputStream is = source.getInputStream();
+		InputStream inputStream = null;
+		OutputStream outputStream = null;
+		try {
+			inputStream = source.getInputStream();
 
-		HdfsResource hdfsResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
+			HdfsResource hdfsResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
 
-		// Open new HDFS file
-		OutputStream os = hdfsResource.getOutputStream();
+			// Open new HDFS file
+			outputStream = hdfsResource.getOutputStream();
 
-		// Apply compression
-		if (codec != null) {
-			os = codec.createOutputStream(os);
-			// TODO: Eventually re-use underlying Compressor through CodecPool.
+			// Apply compression
+			if (codec != null) {
+				outputStream = codec.createOutputStream(outputStream);
+				// TODO: Eventually re-use underlying Compressor through CodecPool.
+			}
+
+			// Write source to HDFS destination
+			IOUtils.copyBytes(inputStream, outputStream, config, /*close*/false);
+		} finally {
+			IOUtils.closeStream(outputStream);
+			IOUtils.closeStream(inputStream);
 		}
-
-		// Write source to HDFS destination
-		IOUtils.copyBytes(is, os, config, /* close */true);
 	}
 
 	/**
@@ -139,30 +180,34 @@ public class HdfsWrite {
 	public <T> void write(Collection<? extends T> objects, Class<T> objectsClass, String destination)
 			throws IOException {
 
-		initSerializations();
-
-		if (!destination.toLowerCase().endsWith(SEQ_FILE_EXTENSION)) {
-			destination += SEQ_FILE_EXTENSION;
+		if (!destination.toLowerCase().endsWith(getSerialization().getExtension().toLowerCase())) {
+			destination += getSerialization().getExtension();
 		}
 
 		HdfsResource hdfsResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
 
-		CompressionCodec codec = getCodec();
-		
-		SequenceFile.Writer writer;
-		
-		if (codec != null) {
-			// TODO: @Costin
-			// The question here is: what's THE key value and class when writing pojos?
-			// Different serializations implies different class restrictions.
-			// Since we delegate serialization to underlying Hadoop Serializers we are not aware what key class to pass.
-			// About the value: we might autogenerate one or have a contract with the source object.
-			// So far use NullWritable :)
-			writer = SequenceFile.createWriter(fs, config, hdfsResource.getPath(), NullWritable.class,
-					objectsClass, SequenceFile.CompressionType.BLOCK, codec);			
+		if (serialization == SerializationType.AVRO) {
+			writeAvro(objects, objectsClass, hdfsResource);
 		} else {
-			writer = SequenceFile.createWriter(fs, config, hdfsResource.getPath(), NullWritable.class,
-							objectsClass, SequenceFile.CompressionType.NONE);			
+			writeSeqFile(objects, objectsClass, hdfsResource);
+		}
+	}
+
+	protected <T> void writeSeqFile(Collection<? extends T> objects, Class<T> objectsClass, HdfsResource hdfsResource)
+			throws IOException {
+
+		initSerializations();
+
+		CompressionCodec codec = getHadoopCodec();
+
+		SequenceFile.Writer writer = null;
+
+		if (codec != null) {
+			writer = SequenceFile.createWriter(fs, config, hdfsResource.getPath(), NullWritable.class, objectsClass,
+					SequenceFile.CompressionType.BLOCK, codec);
+		} else {
+			writer = SequenceFile.createWriter(fs, config, hdfsResource.getPath(), NullWritable.class, objectsClass,
+					SequenceFile.CompressionType.NONE);
 		}
 
 		try {
@@ -170,7 +215,33 @@ public class HdfsWrite {
 				writer.append(NullWritable.get(), object);
 			}
 		} finally {
-			writer.close();
+			IOUtils.closeStream(writer);
+		}
+	}
+
+	protected <T> void writeAvro(Collection<? extends T> objects, Class<T> objectsClass, HdfsResource hdfsResource)
+			throws IOException {
+
+		DataFileWriter<T> writer = null;
+		OutputStream outputStream = null;
+		try {
+			Schema schema = ReflectData.get().getSchema(objectsClass);
+
+			writer = new DataFileWriter<T>(new ReflectDatumWriter<T>(schema));
+
+			writer.setCodec(getAvroCodec());
+
+			outputStream = hdfsResource.getOutputStream();
+
+			writer.create(schema, outputStream);
+
+			for (T object : objects) {
+				writer.append(object);
+			}
+		} finally {
+			// The order is VERY important.
+			IOUtils.closeStream(writer);
+			IOUtils.closeStream(outputStream);
 		}
 	}
 
@@ -178,7 +249,7 @@ public class HdfsWrite {
 	 * @return The codec to be used to compress the data on the fly while storing it onto HDFS if the
 	 * <code>codecAlias</code> property is specified; <code>null</code> otherwise.
 	 */
-	private CompressionCodec getCodec() {
+	private CompressionCodec getHadoopCodec() {
 
 		if (!StringUtils.hasText(codecAlias)) {
 			return null;
@@ -201,7 +272,10 @@ public class HdfsWrite {
 
 		// TODO: Should we fall back to some default codec if not resolved?
 		return codec;
+	}
 
+	private CodecFactory getAvroCodec() {
+		return StringUtils.hasText(codecAlias) ? CodecFactory.fromString(codecAlias) : CodecFactory.nullCodec();
 	}
 
 	/**
