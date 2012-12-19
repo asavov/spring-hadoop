@@ -29,7 +29,8 @@ import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 import java.io.Serializable;
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -62,11 +63,11 @@ public class HdfsWriteTest {
 
 	private static long timestamp;
 
-	/* 
-	 * The instance under testing. 
+	/*
+	 * The instance under testing.
 	 * 
-	 * A NEW instance (scope = prototype) is injected by Spring runner for each test execution.
-	 * See HdfsWriteTest-context.xml file.
+	 * A NEW instance (scope = prototype) is injected by Spring runner for each test execution. See
+	 * HdfsWriteTest-context.xml file.
 	 */
 	@Autowired
 	private HdfsWrite hdfs;
@@ -82,7 +83,7 @@ public class HdfsWriteTest {
 	 */
 	@Value("${hdfs.write.output.dir}")
 	private String hdfsOutputDir;
-	
+
 	/**
 	 * Used as HDFS read-accessor to assert existence of written file.
 	 */
@@ -94,7 +95,6 @@ public class HdfsWriteTest {
 
 	@Autowired
 	private Configuration config;
-
 
 	@BeforeClass
 	public static void beforeClass() {
@@ -120,7 +120,7 @@ public class HdfsWriteTest {
 	@Test
 	public void testWriteToSeqFileWritable() throws Exception {
 
-		testWriteToSeqFile(new PojoWritable(), /* compress */false);
+		testWriteToSeqFile(PojoWritable.class, /* compress */false);
 	}
 
 	/**
@@ -129,25 +129,25 @@ public class HdfsWriteTest {
 	@Test
 	public void testCompressedWriteToSeqFileWritable() throws Exception {
 
-		testWriteToSeqFile(new PojoWritable(), /* compress */true);
+		testWriteToSeqFile(PojoWritable.class, /* compress */true);
 	}
 
 	/**
-	 * Test write of single pojo using Java serialization.
+	 * Test write of collection of pojos using Java serialization.
 	 */
 	@Test
 	public void testWriteToSeqFileSerializable() throws Exception {
 
-		testWriteToSeqFile(new PojoSerializable(), /* compress */false);
+		testWriteToSeqFile(PojoSerializable.class, /* compress */false);
 	}
 
 	/**
-	 * Test compressed write of single pojo using Java serialization.
+	 * Test compressed write of collection of pojos using Java serialization.
 	 */
 	@Test
 	public void testCompressedWriteToSeqFileSerializable() throws Exception {
 
-		testWriteToSeqFile(new PojoSerializable(), /* compress */true);
+		testWriteToSeqFile(PojoSerializable.class, /* compress */true);
 	}
 
 	/**
@@ -201,7 +201,7 @@ public class HdfsWriteTest {
 		 */
 
 		hdfsOutputDir += "hadoop-codecs/";
-		
+
 		final StringBuilder exceptions = new StringBuilder();
 
 		// Get a list of all codecs supported by Hadoop
@@ -280,33 +280,46 @@ public class HdfsWriteTest {
 		assertTrue("'" + hdfsFile + "' file is not present on HDFS.", hdfsLoader.getResource(hdfsFile).exists());
 	}
 
-	private <T> void testWriteToSeqFile(T javaObject, boolean compress) throws Exception {
+	@SuppressWarnings("unchecked")
+	private <T> void testWriteToSeqFile(Class<T> objectClass, boolean compress) throws Exception {
 
-		String destination = destination(javaObject, compress);
+		List<T> javaObjects = new ArrayList<T>();
+
+		for (int i = 0; i < 5000; i++) {
+			javaObjects.add(objectClass.newInstance());
+		}
+
+		String destination = destination(javaObjects.get(0), compress);
 
 		if (compress) {
 			// Use default hadoop compression
 			hdfs.setCodecAlias(DefaultCodec.class.getSimpleName());
 		}
 
-		// @Costin, how to do the right 'casts' here? Or how to change the method under testing?
-		hdfs.write(Collections.singletonList(javaObject), (Class<T>) javaObject.getClass(), destination);
+		hdfs.write(javaObjects, (Class<T>) javaObjects.get(0).getClass(), destination);
 
 		assertHdfsFileExists(destination);
 
-		assertEquals(javaObject, readFromSeqFile(destination));
+		assertEquals(javaObjects, readFromSeqFile(destination));
 	}
 
-	private Object readFromSeqFile(String destination) throws Exception {
+	@SuppressWarnings("unchecked")
+	private <T> List<T> readFromSeqFile(String destination) throws Exception {
 
 		SequenceFile.Reader reader = new SequenceFile.Reader(fs, new Path(destination), config);
 
 		try {
-			Object dummyKey = reader.next((Object) NullWritable.get());
+			List<T> objects = new ArrayList<T>();
 
-			assertSame(NullWritable.get(), dummyKey);
+			Object key = null;
+			while ((key = reader.next((Object) NullWritable.get())) != null) {
 
-			return reader.getCurrentValue(reader.getValueClass().newInstance());
+				assertSame(NullWritable.get(), key);
+
+				objects.add((T) reader.getCurrentValue(reader.getValueClass().newInstance()));
+			}
+
+			return objects;
 
 		} finally {
 			reader.close();
@@ -319,14 +332,17 @@ public class HdfsWriteTest {
 		public String getDefaultExtension() {
 			return ".cusTom";
 		}
-
 	}
 
-	public static class Pojo {
+	public static class PojoSerializable implements Serializable {
 
-		private String name = "here goes Pojo's name";
+		private static final long serialVersionUID = 4225081912489347353L;
 
-		private String description = "and here goes Pojo's description :)";
+		static int id = 0;
+
+		String name = "here goes Pojo's name (" + id + ")";
+
+		String description = "...and here goes Pojo's description :)";
 
 		public String getName() {
 			return name;
@@ -342,6 +358,11 @@ public class HdfsWriteTest {
 
 		public void setDescription(String description) {
 			this.description = description;
+		}
+
+		@Override
+		public String toString() {
+			return getClass().getSimpleName() + " [name=" + name + "]";
 		}
 
 		/*
@@ -371,7 +392,7 @@ public class HdfsWriteTest {
 				return false;
 			if (getClass() != obj.getClass())
 				return false;
-			Pojo other = (Pojo) obj;
+			PojoSerializable other = (PojoSerializable) obj;
 			if (description == null) {
 				if (other.description != null)
 					return false;
@@ -384,10 +405,11 @@ public class HdfsWriteTest {
 				return false;
 			return true;
 		}
-
 	}
 
-	public static class PojoWritable extends Pojo implements Writable {
+	public static class PojoWritable extends PojoSerializable implements Writable {
+
+		private static final long serialVersionUID = -1196188141912933846L;
 
 		public void write(DataOutput out) throws IOException {
 			out.writeUTF(getName());
@@ -400,13 +422,7 @@ public class HdfsWriteTest {
 		}
 	}
 
-	public static class PojoSerializable extends Pojo implements Serializable {
-
-		private static final long serialVersionUID = -1183104200586999767L;
-
-	}
-
-	public static class PojoExternalizble extends Pojo implements Externalizable {
+	public static class PojoExternalizble extends PojoSerializable implements Externalizable {
 
 		public void writeExternal(ObjectOutput out) throws IOException {
 			out.writeUTF(getName());
@@ -417,6 +433,5 @@ public class HdfsWriteTest {
 			setName(in.readUTF());
 			setDescription(in.readUTF());
 		}
-
 	}
 }
