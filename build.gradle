@@ -113,7 +113,11 @@ dependencies {
     optional("org.springframework.integration:spring-integration-stream:$springIntVersion")
     optional("org.springframework.integration:spring-integration-file:$springIntVersion")
 
-
+	// Avro
+	optional("org.apache.avro:avro-mapred:$avroVersion") { dep ->
+        exclude module: "hadoop-core"
+    } 
+	
     // cascading
     optional("cascading:cascading-hadoop:$cascadingVersion") { dep ->
         exclude module: "hadoop-core"
