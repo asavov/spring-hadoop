@@ -54,19 +54,19 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
-import org.springframework.data.hadoop.fs.HdfsWrite.SerializationFormatSupport;
-import org.springframework.data.hadoop.fs.HdfsWrite.SerializationKeyProvider;
+import org.springframework.data.hadoop.fs.HdfsWriter.SerializationFormatSupport;
+import org.springframework.data.hadoop.fs.HdfsWriter.SerializationKeyProvider;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 /**
- * Integration test for {@link HdfsWrite} testing simple and compressed writes of a file to HDFS.
+ * Integration test for {@link HdfsWriter} testing simple and compressed writes of a file to HDFS.
  * 
  * @author Alex Savov
  */
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration
-public class HdfsWriteTest {
+public class HdfsWriterTest {
 
 	private static long timestamp;
 
@@ -77,7 +77,7 @@ public class HdfsWriteTest {
 	 * HdfsWriteTest-context.xml file.
 	 */
 	@Autowired
-	private HdfsWrite hdfs;
+	private HdfsWriter hdfs;
 
 	/**
 	 * The file that's written to HDFS with/out compression.
@@ -311,7 +311,7 @@ public class HdfsWriteTest {
 
 	/**
 	 * Tests core compressed write logic. Although a codec is being passed as a parameter the method under testing is
-	 * {@link HdfsWrite#write(Resource, String, String)}.
+	 * {@link HdfsWriter#write(Resource, String, String)}.
 	 * 
 	 * @param codec Used ONLY to get codec extension and its class name or alias in a type-safe manner.
 	 * @param useAlias If <code>true</code> uses <code>codec.getClass().getSimpleName()</code> as a codec alias.

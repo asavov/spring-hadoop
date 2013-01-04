@@ -61,7 +61,7 @@ import org.springframework.util.StringUtils;
  * 
  * @author Alex Savov
  */
-public class HdfsWrite {
+public class HdfsWriter {
 
 	/**
 	 * This interface represents a strategy to write a collection of Java objects to HDFS. See specific implementations
@@ -75,7 +75,7 @@ public class HdfsWrite {
 		// boolean accept(Class<?> objectsClass);
 
 		/**
-		 * Mirrors core {@link HdfsWrite#write(Collection, Class, String)} method encapsulating just a single
+		 * Mirrors core {@link HdfsWriter#write(Collection, Class, String)} method encapsulating just a single
 		 * serialization use-case, such as write to SequenceFiles using Java serialization.
 		 * 
 		 * @param objects The objects to write.
