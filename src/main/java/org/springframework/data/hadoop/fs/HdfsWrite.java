@@ -24,14 +24,13 @@ import java.util.Collection;
 import org.apache.avro.Schema;
 import org.apache.avro.file.CodecFactory;
 import org.apache.avro.file.DataFileWriter;
-import org.apache.avro.mapred.AvroJob;
+import org.apache.avro.hadoop.io.AvroSerialization;
 import org.apache.avro.mapred.AvroKey;
-import org.apache.avro.mapred.AvroSerialization;
 import org.apache.avro.mapred.AvroValue;
-import org.apache.avro.mapred.Pair;
 import org.apache.avro.reflect.ReflectData;
 import org.apache.avro.reflect.ReflectDatumWriter;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.NullWritable;
@@ -69,9 +68,10 @@ public class HdfsWrite {
 	 * for more details.
 	 */
 	// @Costin: Enum as inner or separate class? The same question applies for other inner classes/interfaces.
+	// NOTE [naming]: SerializationFormat vs SerializationWriter?
 	public static interface SerializationFormat {
 
-		// @Costin: should we "mirror" Hadoop SequenceFile serialization framework to some extend?
+		// @Costin: should we "mirror" Hadoop SequenceFile serialization framework at some extend?
 		// boolean accept(Class<?> objectsClass);
 
 		/**
@@ -253,9 +253,10 @@ public class HdfsWrite {
 	 * <li>Exposing hook methods to allow 'write of objects' customization.</li>
 	 * </ul>
 	 */
-	// @Costin: TODO [IMPORTANT] how to pass HdfsWrite context (codec, config, hdfs loader, etc) to descendant classes
+	// @Costin: TODO [IMPORTANT] how to pass HdfsWrite context (codec, hdfs loader, etc) to descendant classes
 	// and make them self-contained and decoupled from HdfsWrite parent class.
-	public abstract class SerializationFormatSupport implements SerializationFormat {
+	// TODO: Should we clone passed Configuration or should we use it as it is?
+	public abstract class SerializationFormatSupport extends Configured implements SerializationFormat {
 
 		/**
 		 * A template method writing objects to HDFS. Provides hook methods subclasses should override to encapsulate
@@ -321,23 +322,6 @@ public class HdfsWrite {
 	public abstract class AbstractSequenceFileWriter extends SerializationFormatSupport {
 
 		/**
-		 * Adds <code>AvroSerialization</code>, <code>WritableSerialization</code> and <code>JavaSerialization</code>
-		 * schemes to Hadoop configuration, so {@link SerializationFactory} instances constructed from the given
-		 * configuration will be aware of it.
-		 */
-		protected <T> void doInit(Iterable<? extends T> objects, Class<T> objectsClass, HdfsResource hdfsResource) {
-
-			final String HADOOP_IO_SERIALIZATIONS = "io.serializations";
-
-			String[] existing = (String[]) config.getStrings(HADOOP_IO_SERIALIZATIONS);
-
-			String[] serializations = { AvroSerialization.class.getCanonicalName(),
-					WritableSerialization.class.getCanonicalName(), JavaSerialization.class.getCanonicalName() };
-
-			config.setStrings(HADOOP_IO_SERIALIZATIONS, StringUtils.mergeStringArrays(existing, serializations));
-		}
-
-		/**
 		 * A template method writing objects to Hadoop using {@link SequenceFile} serialization.
 		 * 
 		 * @see {@link SequenceFile#Writer}
@@ -352,11 +336,11 @@ public class HdfsWrite {
 
 			if (codec != null) {
 				// configure BLOCK compression
-				writer = SequenceFile.createWriter(fs, config, hdfsResource.getPath(), getKeyClass(objectsClass),
+				writer = SequenceFile.createWriter(fs, getConf(), hdfsResource.getPath(), getKeyClass(objectsClass),
 						getValueClass(objectsClass), SequenceFile.CompressionType.BLOCK, codec);
 			} else {
 				// configure NONE compression
-				writer = SequenceFile.createWriter(fs, config, hdfsResource.getPath(), getKeyClass(objectsClass),
+				writer = SequenceFile.createWriter(fs, getConf(), hdfsResource.getPath(), getKeyClass(objectsClass),
 						getValueClass(objectsClass), SequenceFile.CompressionType.NONE);
 			}
 
@@ -377,6 +361,31 @@ public class HdfsWrite {
 			return ".seqfile";
 		}
 
+		/**
+		 * Adds the {@link Serialization} scheme to the configuration, so {@link SerializationFactory} instances are
+		 * aware of it.
+		 * 
+		 * @param serializationClass The Serialization class to register to underlying configuration.
+		 */
+		protected void register(@SuppressWarnings("rawtypes") Class<? extends Serialization>... serializationClasses) {
+			
+			final String HADOOP_IO_SERIALIZATIONS = "io.serializations";
+
+			Configuration conf = getConf();
+
+			Collection<String> serializations = conf.getStringCollection(HADOOP_IO_SERIALIZATIONS);
+
+			for (Class<?> serializationClass : serializationClasses) {
+				
+				if (!serializations.contains(serializationClass.getName())) {
+					
+					serializations.add(serializationClass.getName());				
+				}				
+			}
+			
+			conf.setStrings(HADOOP_IO_SERIALIZATIONS, serializations.toArray(new String[serializations.size()]));
+		}
+
 		protected abstract Class<?> getKeyClass(Class<?> objectsClass);
 
 		protected abstract Object getKey(Object object);
@@ -393,6 +402,16 @@ public class HdfsWrite {
 	 * with serialization support for {@link Serializable} and {@link Writable} classes.
 	 */
 	public class SequenceFileWriter extends AbstractSequenceFileWriter {
+
+		/**
+		 * Adds <code>WritableSerialization</code> and <code>JavaSerialization</code> schemes to Hadoop configuration,
+		 * so {@link SerializationFactory} instances constructed from the given configuration will be aware of it.
+		 */
+		@SuppressWarnings("unchecked")
+		protected <T> void doInit(Iterable<? extends T> objects, Class<T> objectsClass, HdfsResource hdfsResource) {
+
+			register(WritableSerialization.class, JavaSerialization.class);
+		}
 
 		protected Class<?> getKeyClass(Class<?> objectClass) {
 			return getSerializationKeyProvider().getKeyClass();
@@ -415,67 +434,50 @@ public class HdfsWrite {
 	 * Serialization format for writing POJOs in <code>Avro</code> schema using Hadoop {@link SequenceFile}
 	 * serialization framework.
 	 */
-	@SuppressWarnings({ "unchecked", "rawtypes" })
+	@SuppressWarnings({ "unchecked", "rawtypes" })	
 	public class AvroSequenceFileWriter extends AbstractSequenceFileWriter {
 
 		@Override
 		protected <T> void doInit(Iterable<? extends T> objects, Class<T> objectsClass, HdfsResource hdfsResource) {
 
-			super.doInit(objects, objectsClass, hdfsResource);
-
-			// NOTE: The code is a little bit tricky cause this version of AvroSerialization (1.5.4) is designed for MR
-			// Jobs explicitly. While later versions (1.7.1) design is much clear and decoupled from MR Jobs and even
-			// comes with built-in AvroSequenceFile support.
-			// See here:
-			// https://svn.apache.org/repos/asf/avro/trunk/lang/java/mapred/src/main/java/org/apache/avro/hadoop/io/
-
-			// @Costin: comments?
-
 			// Reflective Avro schema of key class
 			Schema keySchema = ReflectData.get().getSchema(getSerializationKeyProvider().getKeyClass());
+
+			AvroSerialization.setKeyWriterSchema(getConf(), keySchema);
+
 			// Reflective Avro schema of value class
 			Schema valueSchema = ReflectData.get().getSchema(objectsClass);
 
-			// Creates the PAIR schema required by AvroSerialization
-			Schema pairSchema = Pair.getPairSchema(keySchema, valueSchema);
+			AvroSerialization.setValueWriterSchema(getConf(), valueSchema);
 
-			/* Magic props used by AvroSerialization */
-
-			// Store the PAIR schema
-			config.set(AvroJob.MAP_OUTPUT_SCHEMA, pairSchema.toString());
-
-			// Use the PAIR schema
-			config.setBoolean("mapred.task.is.map", true);
-
-			// Force creation of ReflectDatumReader as opposite to SpecificDatumReader
-			config.setBoolean(AvroJob.MAP_OUTPUT_IS_REFLECT, true);
+			register(AvroSerialization.class);
 		}
 
 		/**
-		 * @return <code>AvroKey.class</code>
+		 * @return <code>AvroKey.class</code> is always used to write Avro data
 		 */
-		protected Class<AvroKey> getKeyClass(Class<?> objectClass) {
+		protected final Class<?> getKeyClass(Class<?> objectClass) {
 			return AvroKey.class;
 		}
 
 		/**
 		 * @return new <code>AvroKey</code> wrapper around core object key
 		 */
-		protected AvroKey getKey(Object object) {
+		protected Object getKey(Object object) {
 			return new AvroKey(getSerializationKeyProvider().getKey(object));
 		}
 
 		/**
-		 * @return <code>AvroValue.class</code>
+		 * @return <code>AvroValue.class</code> is always used to write Avro data
 		 */
-		protected Class<AvroValue> getValueClass(Class<?> objectClass) {
+		protected final Class<?> getValueClass(Class<?> objectClass) {
 			return AvroValue.class;
 		}
 
 		/**
 		 * @return new <code>AvroValue</code> wrapper around core object
 		 */
-		protected AvroValue getValue(Object object) {
+		protected Object getValue(Object object) {
 			return new AvroValue(object);
 		}
 	}
@@ -540,8 +542,8 @@ public class HdfsWrite {
 
 		final CompressionCodecFactory codecFactory = new CompressionCodecFactory(config);
 
-		// Find codec by canonical class name or by codec alias as specified in Hadoop
-		// configuration
+		// Find codec by canonical class name or by codec alias as specified in Hadoop configuration
+		// @Costin: TODO: The method is NOT available in hadoop-core.1.0.4.jar, but in CDH3 version. How to h it?
 		CompressionCodec codec = codecFactory.getCodecByName(codecAlias);
 
 		// If the codec is not configured within Hadoop try to load it from the classpath
@@ -572,7 +574,7 @@ public class HdfsWrite {
 			return NullWritable.class;
 		}
 	}
-	
+
 	// TODO: Provide Reflective/SPEL implementation of SerializationKeyProvider
 
 }

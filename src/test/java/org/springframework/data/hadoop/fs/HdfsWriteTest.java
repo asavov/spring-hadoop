@@ -27,9 +27,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 import org.apache.avro.file.DataFileStream;
+import org.apache.avro.hadoop.io.AvroSerialization;
 import org.apache.avro.mapred.AvroWrapper;
 import org.apache.avro.reflect.ReflectDatumReader;
 import org.apache.hadoop.conf.Configuration;
@@ -42,6 +44,8 @@ import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.io.compress.GzipCodec;
+import org.apache.hadoop.io.serializer.JavaSerialization;
+import org.apache.hadoop.io.serializer.WritableSerialization;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -115,16 +119,38 @@ public class HdfsWriteTest {
 	@Before
 	public void initSerializationFormats() {
 		
-		AVRO = hdfs.new AvroWriter();
-
-		SEQUENCE_FILE_JAVA = hdfs.new SequenceFileWriter();
-
+		// NOTE: we share the same Configuration between SerializationFormats.
+		
+		final String HADOOP_IO_SERIALIZATIONS = "io.serializations";
+		
+		Collection<String> serializations = config.getStringCollection(HADOOP_IO_SERIALIZATIONS);
+		
+		Class<?>[] sClasses = {WritableSerialization.class, JavaSerialization.class, AvroSerialization.class};
+		
+		for (Class<?> serializationClass : sClasses) {
+			
+			if (!serializations.contains(serializationClass.getName())) {
+				
+				serializations.add(serializationClass.getName());				
+			}				
+		}
+		
+		config.setStrings(HADOOP_IO_SERIALIZATIONS, serializations.toArray(new String[serializations.size()]));
+		
 		SEQUENCE_FILE_WRITABLE = hdfs.new SequenceFileWriter();
-
-		SEQUENCE_FILE_AVRO = hdfs.new AvroSequenceFileWriter();		
+		SEQUENCE_FILE_WRITABLE.setConf(config);
+		
+		SEQUENCE_FILE_JAVA = hdfs.new SequenceFileWriter();
+		SEQUENCE_FILE_JAVA.setConf(config);		
+				
+		SEQUENCE_FILE_AVRO = hdfs.new AvroSequenceFileWriter();
+		SEQUENCE_FILE_AVRO.setConf(config);		
+		
+		AVRO = hdfs.new AvroWriter();
+		AVRO.setConf(config);		
 	}
 	
-	/**
+	/*
 	 * Test write from source file to HDFS destination.
 	 */
 	@Test
@@ -359,7 +385,7 @@ public class HdfsWriteTest {
 		String destination = destination(objectClass, serialization, compress);
 
 		hdfs.setSerializationFormat(serialization);
-
+		
 		if (compress) {
 			// Use default Hadoop compression (via its alias) also supported by Avro!
 			hdfs.setCodecAlias("deflate");
@@ -369,7 +395,7 @@ public class HdfsWriteTest {
 
 		assertHdfsFileExists(destination);
 
-		List<?> readObjects = serialization == AVRO ? readFromAvro(destination) : readFromSeqFile(destination);
+		List<?> readObjects = (serialization == AVRO) ? readFromAvro(destination) : readFromSeqFile(destination);
 
 		assertEquals(objects, readObjects);
 	}
