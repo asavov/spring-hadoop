@@ -19,6 +19,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.Collection;
 
 import org.apache.avro.Schema;
@@ -44,8 +47,13 @@ import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.io.serializer.WritableSerialization;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.MethodParameter;
+import org.springframework.core.convert.TypeDescriptor;
 import org.springframework.core.io.Resource;
 import org.springframework.data.hadoop.HadoopException;
+import org.springframework.expression.AccessException;
+import org.springframework.expression.spel.support.ReflectivePropertyAccessor;
+import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.StringUtils;
 
@@ -71,7 +79,7 @@ public class HdfsWriter {
 	// NOTE [naming]: SerializationFormat vs SerializationWriter?
 	public static interface SerializationFormat {
 
-		// @Costin: should we "mirror" Hadoop SequenceFile serialization framework at some extend?
+		// @Costin: should we "mirror" Hadoop SequenceFile serialization framework to some extend?
 		// boolean accept(Class<?> objectsClass);
 
 		/**
@@ -92,22 +100,26 @@ public class HdfsWriter {
 	 * An instance of this interface is responsible to provide a key for an object that is written to HDFS using a
 	 * serialization format which stores the data as key-value pairs. The object is stored as a value while the key is
 	 * provided by this interface.
-	 * 
-	 * @param <T> The type of serialization key.
 	 */
-	public static interface SerializationKeyProvider<T> {
+	// @Costin: Should we somehow utilize ConversionService/[Generic]Converter or conform to its design?
+	// Should we go with generic types? Any Comments?
+	public static interface SerializationKeyProvider {
 
 		/**
-		 * @param object The Java object that is stored into HDFS.
+		 * Provides a key for passed object.
 		 * 
-		 * @return The serialization key corresponding to passed object.
+		 * @param object The object for which a key should be provided.
+		 * 
+		 * @return The key provided for passed object. <code>null</code> if the object class is not supported.
 		 */
-		public T getKey(Object object);
+		public Object getKey(Object object);
 
 		/**
-		 * @return The class of serialization key supported by this provider.
+		 * @param objectClass The object class for which a key should be provided.
+		 * 
+		 * @return The key class supported by this provider for given object class. <code>null</code> otherwise.
 		 */
-		public Class<T> getKeyClass();
+		public Class<?> getKeyClass(Class<?> objectClass);
 	}
 
 	@Autowired
@@ -126,20 +138,20 @@ public class HdfsWriter {
 	private SerializationFormat serializationFormat = new SequenceFileWriter();
 
 	/* This property is publicly configurable. */
-	private SerializationKeyProvider<?> serKeyProvider = NullSerializationKeyProvider.INSTANCE;
+	private SerializationKeyProvider serializationKeyProvider = NullSerializationKeyProvider.INSTANCE;
 
 	/**
 	 * @return the serializationKey
 	 */
-	public SerializationKeyProvider<?> getSerializationKeyProvider() {
-		return serKeyProvider;
+	public SerializationKeyProvider getSerializationKeyProvider() {
+		return serializationKeyProvider;
 	}
 
 	/**
 	 * @param serializationKey
 	 */
-	public void setSerializationKeyProvider(SerializationKeyProvider<?> serializationKey) {
-		this.serKeyProvider = serializationKey;
+	public void setSerializationKeyProvider(SerializationKeyProvider serializationKey) {
+		this.serializationKeyProvider = serializationKey;
 	}
 
 	/**
@@ -368,7 +380,7 @@ public class HdfsWriter {
 		 * @param serializationClass The Serialization class to register to underlying configuration.
 		 */
 		protected void register(@SuppressWarnings("rawtypes") Class<? extends Serialization>... serializationClasses) {
-			
+
 			final String HADOOP_IO_SERIALIZATIONS = "io.serializations";
 
 			Configuration conf = getConf();
@@ -376,13 +388,13 @@ public class HdfsWriter {
 			Collection<String> serializations = conf.getStringCollection(HADOOP_IO_SERIALIZATIONS);
 
 			for (Class<?> serializationClass : serializationClasses) {
-				
+
 				if (!serializations.contains(serializationClass.getName())) {
-					
-					serializations.add(serializationClass.getName());				
-				}				
+
+					serializations.add(serializationClass.getName());
+				}
 			}
-			
+
 			conf.setStrings(HADOOP_IO_SERIALIZATIONS, serializations.toArray(new String[serializations.size()]));
 		}
 
@@ -414,7 +426,7 @@ public class HdfsWriter {
 		}
 
 		protected Class<?> getKeyClass(Class<?> objectClass) {
-			return getSerializationKeyProvider().getKeyClass();
+			return getSerializationKeyProvider().getKeyClass(objectClass);
 		}
 
 		protected Object getKey(Object object) {
@@ -434,14 +446,14 @@ public class HdfsWriter {
 	 * Serialization format for writing POJOs in <code>Avro</code> schema using Hadoop {@link SequenceFile}
 	 * serialization framework.
 	 */
-	@SuppressWarnings({ "unchecked", "rawtypes" })	
 	public class AvroSequenceFileWriter extends AbstractSequenceFileWriter {
 
 		@Override
+		@SuppressWarnings("unchecked")
 		protected <T> void doInit(Iterable<? extends T> objects, Class<T> objectsClass, HdfsResource hdfsResource) {
 
 			// Reflective Avro schema of key class
-			Schema keySchema = ReflectData.get().getSchema(getSerializationKeyProvider().getKeyClass());
+			Schema keySchema = ReflectData.get().getSchema(getSerializationKeyProvider().getKeyClass(objectsClass));
 
 			AvroSerialization.setKeyWriterSchema(getConf(), keySchema);
 
@@ -463,6 +475,7 @@ public class HdfsWriter {
 		/**
 		 * @return new <code>AvroKey</code> wrapper around core object key
 		 */
+		@SuppressWarnings({ "unchecked", "rawtypes" })
 		protected Object getKey(Object object) {
 			return new AvroKey(getSerializationKeyProvider().getKey(object));
 		}
@@ -477,6 +490,7 @@ public class HdfsWriter {
 		/**
 		 * @return new <code>AvroValue</code> wrapper around core object
 		 */
+		@SuppressWarnings({ "unchecked", "rawtypes" })
 		protected Object getValue(Object object) {
 			return new AvroValue(object);
 		}
@@ -562,19 +576,111 @@ public class HdfsWriter {
 	/**
 	 * Default implementation of {@link SerializationKeyProvider} returning {@link NullWritable} key for every object.
 	 */
-	public static class NullSerializationKeyProvider implements SerializationKeyProvider<NullWritable> {
+	public static class NullSerializationKeyProvider implements SerializationKeyProvider {
 
-		static final NullSerializationKeyProvider INSTANCE = new NullSerializationKeyProvider();
+		public static final NullSerializationKeyProvider INSTANCE = new NullSerializationKeyProvider();
 
+		/**
+		 * @return The singleton <code>NullWritable</code> as returned by {@link NullWritable#get()} method.
+		 */
 		public NullWritable getKey(Object object) {
 			return NullWritable.get();
 		}
 
-		public Class<NullWritable> getKeyClass() {
+		/**
+		 * @return <code>NullWritable.class</code> for every object class
+		 */
+		public Class<NullWritable> getKeyClass(Class<?> objectClass) {
 			return NullWritable.class;
 		}
 	}
 
-	// TODO: Provide Reflective/SPEL implementation of SerializationKeyProvider
+	/**
+	 * Reflective implementation of {@link SerializationKeyProvider} returning specific object property as object key. A
+	 * property is accessible through a getter method or a field of the object.
+	 */
+	// @Costin: Is there a class that provides reflective info (TypeDescriptor) and property access based on Class.
+	// Both beans.PropertyAccessor and expression.PropertyAccessor interfaces provide metadata only by object instance.
+	public static class ReflectiveSerializationKeyProvider extends ReflectivePropertyAccessor implements
+			SerializationKeyProvider {
+
+		/* The name of the property (either getter method or field) to use as key. */
+		private final String propertyName;
+
+		/* The class of the object for which a key should be provided. */
+		private final Class<?> objectClass;
+
+		/* A metadata for the key property (either getter method or field). */
+		private final TypeDescriptor keyDescriptor;
+
+		/**
+		 * @param objectClass The class of the object for which a key should be provided.
+		 * @param propertyName The name of the property (either getter method or field) to use as key.
+		 */
+		public ReflectiveSerializationKeyProvider(Class<?> objectClass, String propertyName) {
+
+			// @Costin: Unfortunately [Reflective]PropertyAccessor does not provide access to underlying TypeDescriptor,
+			// so we need manually to extra it and mimic [can]Read method. Is there a better way to achieve that?
+
+			// Try to resolve from getter...
+			Method getter = findGetterForProperty(propertyName, objectClass, false);
+			if (getter != null) {
+				keyDescriptor = new TypeDescriptor(new MethodParameter(getter, -1));
+			} else {
+				// Try to resolve from field
+				Field field = findField(propertyName, objectClass, false);
+				if (field != null) {
+					keyDescriptor = new TypeDescriptor(field);
+				} else {
+					throw new HadoopException("Neither getter method nor field found for property '" + propertyName
+							+ "' of '" + objectClass + "'.");
+				}
+			}
+
+			this.objectClass = objectClass;
+			this.propertyName = propertyName;
+		}
+
+		/**
+		 * @return The value of the key property, which is either getter method or field on the object.
+		 */
+		public Object getKey(Object object) {
+			Assert.notNull(getKeyClass(object.getClass()),
+					"This ReflectiveSerializationKeyProvider provides keys only for objects of " + objectClass);
+
+			try {
+				return read(null, object, propertyName).getValue();
+			} catch (AccessException e) {
+				throw new HadoopException(e.getMessage(), e);
+			}
+		}
+
+		/**
+		 * Keys are provided only for the object class that's specified in the constructor.
+		 * 
+		 * @return The class of the key property (either getter method or field). <code>null</code> if passed object
+		 * class is not supported by this provider.
+		 */
+		public Class<?> getKeyClass(Class<?> objectClass) {
+			return (this.objectClass == objectClass) ? keyDescriptor.getObjectType() : null;
+		}
+
+		/**
+		 * Find a declared field (as specified by {@link Class#getDeclaredField(String)} contract) of a certain name on
+		 * a specified class.
+		 */
+		@Override
+		protected Field findField(String name, Class<?> clazz, boolean mustBeStatic) {
+			// IMPORTANT: this method is copy-paste-modified from parent class.
+			// Reason: get ALL fields instead of getting only PUBLIC fields (getDeclaredFields vs getFields)
+			Field[] fields = clazz.getDeclaredFields();
+			for (Field field : fields) {
+				if (field.getName().equals(name) && (!mustBeStatic || Modifier.isStatic(field.getModifiers()))) {
+					return field;
+				}
+			}
+			return null;
+		}
+	}
 
 }
