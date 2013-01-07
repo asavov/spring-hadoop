@@ -28,15 +28,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 
 import org.apache.avro.file.DataFileStream;
-import org.apache.avro.hadoop.io.AvroSerialization;
 import org.apache.avro.mapred.AvroWrapper;
 import org.apache.avro.reflect.ReflectDatumReader;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.SequenceFile;
@@ -45,8 +41,6 @@ import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.io.compress.GzipCodec;
-import org.apache.hadoop.io.serializer.JavaSerialization;
-import org.apache.hadoop.io.serializer.WritableSerialization;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -55,12 +49,10 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
-import org.springframework.data.hadoop.fs.HdfsWriter.ReflectiveSerializationKeyProvider;
-import org.springframework.data.hadoop.fs.HdfsWriter.SerializationFormatSupport;
-import org.springframework.data.hadoop.fs.HdfsWriter.SerializationKeyProvider;
 import org.springframework.expression.AccessException;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.util.ClassUtils;
 
 /**
  * Integration test for {@link HdfsWriter} testing simple and compressed writes of a file to HDFS.
@@ -94,18 +86,6 @@ public class HdfsWriterTest {
 	@Value("${hdfs.write.output.dir}")
 	private String hdfsOutputDir;
 
-	/**
-	 * Used as HDFS read-accessor to assert existence of written file.
-	 */
-	@Autowired
-	private HdfsResourceLoader hdfsLoader;
-
-	@Autowired
-	private FileSystem fs;
-
-	@Autowired
-	private Configuration config;
-
 	@BeforeClass
 	public static void beforeClass() {
 		timestamp = System.currentTimeMillis();
@@ -113,44 +93,40 @@ public class HdfsWriterTest {
 
 	private SerializationFormatSupport AVRO;
 
-	private SerializationFormatSupport SEQUENCE_FILE_JAVA;
+	private SequenceFileFormatSupport SEQUENCE_FILE_JAVA;
 
-	private SerializationFormatSupport SEQUENCE_FILE_WRITABLE;
+	private SequenceFileFormatSupport SEQUENCE_FILE_WRITABLE;
 
-	private SerializationFormatSupport SEQUENCE_FILE_AVRO;
+	private SequenceFileFormatSupport SEQUENCE_FILE_AVRO;
 
 	@Before
 	public void initSerializationFormats() {
 
-		// NOTE: we share the same Configuration between SerializationFormats.
+		// TODO: If we decide to clone Configuration for every SerializationFormat then this code is required.
+		/*
+		 * Collection<String> serializations = hdfs.configuration.getStringCollection(HADOOP_IO_SERIALIZATIONS);
+		 * 
+		 * Class<?>[] sClasses = { WritableSerialization.class, JavaSerialization.class, AvroSerialization.class };
+		 * 
+		 * for (Class<?> serializationClass : sClasses) {
+		 * 
+		 * if (!serializations.contains(serializationClass.getName())) {
+		 * 
+		 * serializations.add(serializationClass.getName()); } }
+		 * 
+		 * hdfs.configuration.setStrings(HADOOP_IO_SERIALIZATIONS, serializations.toArray(new
+		 * String[serializations.size()]));
+		 */
 
-		final String HADOOP_IO_SERIALIZATIONS = "io.serializations";
+		// NOTE: So far we share the same Configuration between SerializationFormats.
 
-		Collection<String> serializations = config.getStringCollection(HADOOP_IO_SERIALIZATIONS);
+		SEQUENCE_FILE_WRITABLE = new SequenceFileFormat();
 
-		Class<?>[] sClasses = { WritableSerialization.class, JavaSerialization.class, AvroSerialization.class };
+		SEQUENCE_FILE_JAVA = new SequenceFileFormat();
 
-		for (Class<?> serializationClass : sClasses) {
+		SEQUENCE_FILE_AVRO = new AvroSequenceFileFormat();
 
-			if (!serializations.contains(serializationClass.getName())) {
-
-				serializations.add(serializationClass.getName());
-			}
-		}
-
-		config.setStrings(HADOOP_IO_SERIALIZATIONS, serializations.toArray(new String[serializations.size()]));
-
-		SEQUENCE_FILE_WRITABLE = hdfs.new SequenceFileWriter();
-		SEQUENCE_FILE_WRITABLE.setConf(config);
-
-		SEQUENCE_FILE_JAVA = hdfs.new SequenceFileWriter();
-		SEQUENCE_FILE_JAVA.setConf(config);
-
-		SEQUENCE_FILE_AVRO = hdfs.new AvroSequenceFileWriter();
-		SEQUENCE_FILE_AVRO.setConf(config);
-
-		AVRO = hdfs.new AvroWriter();
-		AVRO.setConf(config);
+		AVRO = new AvroFormat();
 	}
 
 	/*
@@ -208,7 +184,7 @@ public class HdfsWriterTest {
 	@Test
 	public void testWriteOfAvroToSeqFile() throws Exception {
 
-		hdfs.setSerializationKeyProvider(new SerializationKeyProvider() {
+		SEQUENCE_FILE_AVRO.setSerializationKeyProvider(new SerializationKeyProvider() {
 
 			public Void getKey(Object object) {
 				return (Void) null;
@@ -256,8 +232,8 @@ public class HdfsWriterTest {
 	public void testCompressedWriteUsingHadoopCodecAlias() throws IOException {
 
 		// DefaultCodec is configured by Hadoop by default
-		final CompressionCodec codec = new CompressionCodecFactory(config).getCodecByName(DefaultCodec.class
-				.getSimpleName());
+		final CompressionCodec codec = new CompressionCodecFactory(hdfs.configuration)
+				.getCodecByName(DefaultCodec.class.getSimpleName());
 
 		testCompressedWrite(codec, /* useCodecAlias */true);
 	}
@@ -269,7 +245,7 @@ public class HdfsWriterTest {
 	public void testCompressedWriteUsingHadoopCodecClassName() throws IOException {
 
 		// GzipCodec is configured by Hadoop by default
-		final CompressionCodec codec = new CompressionCodecFactory(config).getCodecByName(GzipCodec.class
+		final CompressionCodec codec = new CompressionCodecFactory(hdfs.configuration).getCodecByName(GzipCodec.class
 				.getSimpleName());
 
 		testCompressedWrite(codec, /* useCodecAlias */false);
@@ -301,9 +277,9 @@ public class HdfsWriterTest {
 		final StringBuilder exceptions = new StringBuilder();
 
 		// Get a list of all codecs supported by Hadoop
-		for (Class<? extends CompressionCodec> codecClass : CompressionCodecFactory.getCodecClasses(config)) {
+		for (Class<? extends CompressionCodec> codecClass : CompressionCodecFactory.getCodecClasses(hdfs.configuration)) {
 			try {
-				testCompressedWrite(ReflectionUtils.newInstance(codecClass, config), /* useCodecAlias */true);
+				testCompressedWrite(ReflectionUtils.newInstance(codecClass, hdfs.configuration), /* useCodecAlias */true);
 			} catch (Exception exc) {
 				exceptions.append(codecClass.getName() + " not supported. Details: " + exc.getMessage() + "\n");
 			}
@@ -356,7 +332,7 @@ public class HdfsWriterTest {
 		final String destination = destination(source);
 
 		// configure compression
-		hdfs.setCodecAlias(useAlias ? codec.getClass().getSimpleName() : codec.getClass().getName());
+		hdfs.setCompressionAlias(useAlias ? codec.getClass().getSimpleName() : codec.getClass().getName());
 
 		hdfs.write(source, destination);
 
@@ -403,7 +379,8 @@ public class HdfsWriterTest {
 	}
 
 	private void assertHdfsFileExists(String hdfsFile) {
-		assertTrue("'" + hdfsFile + "' file is not present on HDFS.", hdfsLoader.getResource(hdfsFile).exists());
+		assertTrue("'" + hdfsFile + "' file is not present on HDFS.", hdfs.hdfsResourceLoader.getResource(hdfsFile)
+				.exists());
 	}
 
 	private <T> void testSerializationWrite(Class<T> objectClass, SerializationFormatSupport serialization,
@@ -421,7 +398,7 @@ public class HdfsWriterTest {
 
 		if (compress) {
 			// Use default Hadoop compression (via its alias) also supported by Avro!
-			hdfs.setCodecAlias("deflate");
+			hdfs.setCompressionAlias("deflate");
 		}
 
 		hdfs.write(objects, objectClass, destination);
@@ -436,7 +413,8 @@ public class HdfsWriterTest {
 	@SuppressWarnings("unchecked")
 	private <T> List<T> readFromSeqFile(String destination) throws Exception {
 
-		SequenceFile.Reader reader = new SequenceFile.Reader(fs, new Path(destination), config);
+		SequenceFile.Reader reader = new SequenceFile.Reader(hdfs.hdfsResourceLoader.getFileSystem(), new Path(
+				destination), hdfs.configuration);
 
 		try {
 			List<T> objects = new ArrayList<T>();
@@ -464,7 +442,7 @@ public class HdfsWriterTest {
 		DataFileStream<T> reader = null;
 		InputStream inputStream = null;
 		try {
-			HdfsResource hdfsResource = (HdfsResource) hdfsLoader.getResource(destination);
+			HdfsResource hdfsResource = (HdfsResource) hdfs.hdfsResourceLoader.getResource(destination);
 
 			inputStream = hdfsResource.getInputStream();
 
@@ -498,11 +476,16 @@ public class HdfsWriterTest {
 
 		private static int COUNTER = 0;
 
-		private int id = COUNTER++;
+		protected int id = COUNTER++;
 
 		private String name = "[" + id + "]";
 
 		private String description = "...here goes Pojo's description :)";
+
+		private List<Integer> relations = new ArrayList<Integer>();
+		{
+			relations.add(id);
+		}
 
 		public String getName() {
 			return name;
@@ -520,30 +503,29 @@ public class HdfsWriterTest {
 			this.description = description;
 		}
 
-		@Override
-		public String toString() {
-			return getClass().getSimpleName() + " [name=" + name + "]";
+		public List<Integer> getRelations() {
+			return relations;
 		}
 
-		/*
-		 * (non-Javadoc)
-		 * 
-		 * @see java.lang.Object#hashCode()
-		 */
+		public void setRelations(List<Integer> relations) {
+			this.relations = relations;
+		}
+
+		@Override
+		public String toString() {
+			return getClass().getSimpleName() + ":" + name;
+		}
+
 		@Override
 		public int hashCode() {
 			final int prime = 31;
 			int result = 1;
-			result = prime * result + ((description == null) ? 0 : description.hashCode());
+			result = prime * result + id;
 			result = prime * result + ((name == null) ? 0 : name.hashCode());
+			result = prime * result + ((relations == null) ? 0 : relations.hashCode());
 			return result;
 		}
 
-		/*
-		 * (non-Javadoc)
-		 * 
-		 * @see java.lang.Object#equals(java.lang.Object)
-		 */
 		@Override
 		public boolean equals(Object obj) {
 			if (this == obj)
@@ -553,15 +535,17 @@ public class HdfsWriterTest {
 			if (getClass() != obj.getClass())
 				return false;
 			PojoSerializable other = (PojoSerializable) obj;
-			if (description == null) {
-				if (other.description != null)
-					return false;
-			} else if (!description.equals(other.description))
+			if (id != other.id)
 				return false;
 			if (name == null) {
 				if (other.name != null)
 					return false;
 			} else if (!name.equals(other.name))
+				return false;
+			if (relations == null) {
+				if (other.relations != null)
+					return false;
+			} else if (!relations.equals(other.relations))
 				return false;
 			return true;
 		}
@@ -572,13 +556,42 @@ public class HdfsWriterTest {
 		private static final long serialVersionUID = -1196188141912933846L;
 
 		public void write(DataOutput out) throws IOException {
+			out.writeInt(id);
 			out.writeUTF(getName());
 			out.writeUTF(getDescription());
+
+			{
+				out.writeUTF(getRelations().getClass().getName());
+				out.writeInt(getRelations().size());
+
+				for (Integer relation : getRelations()) {
+					out.writeInt(relation);
+				}
+			}
 		}
 
 		public void readFields(DataInput in) throws IOException {
+			id = in.readInt();
 			setName(in.readUTF());
 			setDescription(in.readUTF());
+
+			try {
+				String listClassName = in.readUTF();
+
+				Class<?> listClass = ClassUtils.resolveClassName(listClassName, getClass().getClassLoader());
+
+				@SuppressWarnings("unchecked")
+				List<Integer> relations = (List<Integer>) listClass.newInstance();
+
+				for (int i = in.readInt(); i > 0; i--) {
+					relations.add(in.readInt());
+				}
+
+				setRelations(relations);
+
+			} catch (Exception e) {
+				throw new RuntimeException(e.getMessage(), e);
+			}
 		}
 	}
 
