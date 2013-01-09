@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2012 the original author or authors.
+ * Copyright 2013 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.springframework.data.hadoop.fs;
+
+package org.springframework.data.hadoop.serialization;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -31,21 +32,21 @@ import org.springframework.util.StringUtils;
  * 
  * @author Alex Savov
  */
-public class AvroFormat extends SerializationFormatSupport {
+public class AvroFormat<T> extends AbstractObjectsSerializationFormat<T> {
 
-	protected <T> void doWrite(Iterable<? extends T> objects, Class<T> objectsClass, HdfsResource hdfsResource)
-			throws IOException {
+	public AvroFormat(Class<T> objectsClass) {
+		super(objectsClass);
+	}
 
+	@Override
+	public void serialize(Iterable<? extends T> objects, OutputStream outputStream) throws IOException {
 		DataFileWriter<T> writer = null;
-		OutputStream outputStream = null;
 		try {
 			Schema schema = ReflectData.get().getSchema(objectsClass);
 
 			writer = new DataFileWriter<T>(new ReflectDatumWriter<T>(schema));
 
-			writer.setCodec(getAvroCodec());
-
-			outputStream = hdfsResource.getOutputStream();
+			writer.setCodec(getCompression());
 
 			writer.create(schema, outputStream);
 
@@ -53,25 +54,21 @@ public class AvroFormat extends SerializationFormatSupport {
 				writer.append(object);
 			}
 		} finally {
-			// The order is VERY important.
 			IOUtils.closeStream(writer);
-			IOUtils.closeStream(outputStream);
 		}
-	}
-
-	protected <T> void doInit(Iterable<? extends T> objects, Class<T> objectsClass, HdfsResource hdfsResource) {
-		// do nothing
 	}
 
 	/**
 	 * @return <b>.avro</b> is the default file extension for Avro serialization.
 	 */
+	@Override
 	public String getExtension() {
 		return ".avro";
 	}
 
-	protected CodecFactory getAvroCodec() {
-		return StringUtils.hasText(getCompressionAlias()) ? CodecFactory.fromString(getCompressionAlias()) : CodecFactory
-				.nullCodec();
+	protected CodecFactory getCompression() {
+		return StringUtils.hasText(getCompressionAlias()) ? CodecFactory.fromString(getCompressionAlias())
+				: CodecFactory.nullCodec();
 	}
+
 }

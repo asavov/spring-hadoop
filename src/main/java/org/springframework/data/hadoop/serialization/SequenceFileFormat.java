@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2012 the original author or authors.
+ * Copyright 2013 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,10 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.springframework.data.hadoop.fs;
+package org.springframework.data.hadoop.serialization;
 
 import java.io.Serializable;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.serializer.JavaSerialization;
@@ -31,24 +32,32 @@ import org.apache.hadoop.io.serializer.WritableSerialization;
  * 
  * @author Alex Savov
  */
-public class SequenceFileFormat extends SequenceFileFormatSupport {
+public class SequenceFileFormat<T> extends AbstractSequenceFileFormat<T> {
+
+	public SequenceFileFormat(Class<T> objectsClass) {
+		super(objectsClass);
+	}
 
 	/**
 	 * Adds <code>WritableSerialization</code> and <code>JavaSerialization</code> schemes to Hadoop configuration, so
 	 * {@link SerializationFactory} instances constructed from the given configuration will be aware of it.
 	 */
 	@SuppressWarnings("unchecked")
-	protected <T> void doInit(Iterable<? extends T> objects, Class<T> objectsClass, HdfsResource hdfsResource) {
+	public void setConfiguration(Configuration config) {
 
+		super.setConfiguration(config);
+
+		// TODO: Maybe this code should go somewhere else? afterPropertiesSet? 
+		
 		register(WritableSerialization.class, JavaSerialization.class);
 	}
 
 	protected Class<?> getKeyClass(Class<?> objectClass) {
-		return serializationKeyProvider.getKeyClass(objectClass);
+		return getSerializationKeyProvider().getKeyClass(objectClass);
 	}
 
 	protected Object getKey(Object object) {
-		return serializationKeyProvider.getKey(object);
+		return getSerializationKeyProvider().getKey(object);
 	}
 
 	protected Class<?> getValueClass(Class<?> objectClass) {

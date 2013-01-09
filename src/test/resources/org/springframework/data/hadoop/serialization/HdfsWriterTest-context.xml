@@ -9,8 +9,9 @@
 	<import resource="../hadoop-ctx.xml" />
 
 	<!-- The class under testing. -->
-	<bean id="hdfsWriter" class="org.springframework.data.hadoop.fs.HdfsWriter" scope="prototype">
+	<bean id="hdfsWriter" class="org.springframework.data.hadoop.serialization.HdfsWriter" scope="prototype">
 		<constructor-arg ref="hadoopConfiguration" />
 		<constructor-arg ref="hadoopResourceLoader" />
 	</bean>
+	
 </beans>

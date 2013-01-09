@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 the original author or authors.
+ * Copyright 2013 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.springframework.data.hadoop.fs;
+package org.springframework.data.hadoop.serialization;
 
 import static org.apache.commons.io.FilenameUtils.EXTENSION_SEPARATOR;
 import static org.apache.commons.io.FilenameUtils.getExtension;
@@ -49,6 +49,7 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
+import org.springframework.data.hadoop.fs.HdfsResource;
 import org.springframework.expression.AccessException;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
@@ -78,7 +79,7 @@ public class HdfsWriterTest {
 	 * The file that's written to HDFS with/out compression.
 	 */
 	@Value("classpath:/data/apache-short.txt")
-	private Resource source;
+	private Resource sourceResource;
 
 	/**
 	 * All output files are written to that HDFS dir.
@@ -91,13 +92,13 @@ public class HdfsWriterTest {
 		timestamp = System.currentTimeMillis();
 	}
 
-	private SerializationFormatSupport AVRO;
+	private CompressedSerializationFormat<?> AVRO;
 
-	private SequenceFileFormatSupport SEQUENCE_FILE_JAVA;
+	private AbstractSequenceFileFormat<?> SEQUENCE_FILE_JAVA;
 
-	private SequenceFileFormatSupport SEQUENCE_FILE_WRITABLE;
+	private AbstractSequenceFileFormat<?> SEQUENCE_FILE_WRITABLE;
 
-	private SequenceFileFormatSupport SEQUENCE_FILE_AVRO;
+	private AbstractSequenceFileFormat<?> SEQUENCE_FILE_AVRO;
 
 	@Before
 	public void initSerializationFormats() {
@@ -120,13 +121,16 @@ public class HdfsWriterTest {
 
 		// NOTE: So far we share the same Configuration between SerializationFormats.
 
-		SEQUENCE_FILE_WRITABLE = new SequenceFileFormat();
+		(SEQUENCE_FILE_WRITABLE = new SequenceFileFormat<PojoWritable>(PojoWritable.class))
+				.setConfiguration(hdfs.configuration);
 
-		SEQUENCE_FILE_JAVA = new SequenceFileFormat();
+		(SEQUENCE_FILE_JAVA = new SequenceFileFormat<PojoSerializable>(PojoSerializable.class))
+				.setConfiguration(hdfs.configuration);
 
-		SEQUENCE_FILE_AVRO = new AvroSequenceFileFormat();
+		(SEQUENCE_FILE_AVRO = new AvroSequenceFileFormat<PojoSerializable>(PojoSerializable.class))
+				.setConfiguration(hdfs.configuration);
 
-		AVRO = new AvroFormat();
+		AVRO = new AvroFormat<PojoSerializable>(PojoSerializable.class);
 	}
 
 	/*
@@ -135,9 +139,18 @@ public class HdfsWriterTest {
 	@Test
 	public void testWriteSimple() {
 
-		final String destination = destination(source);
+		final String destination = destination(sourceResource);
 
-		hdfs.write(source, destination);
+		ResourceSerializationFormat sFormat;
+		{
+			sFormat = new ResourceSerializationFormat();
+
+			sFormat.setConfiguration(hdfs.configuration);
+		}
+
+		hdfs.setSerializationFormat(sFormat);
+		
+		hdfs.write(sourceResource, destination);
 
 		assertHdfsFileExists(destination);
 	}
@@ -329,15 +342,23 @@ public class HdfsWriterTest {
 	private void testCompressedWrite(CompressionCodec codec, boolean useAlias) throws IOException {
 
 		// calculates the destination from the source.
-		final String destination = destination(source);
+		final String destination = destination(sourceResource);
 
 		// configure compression
-		hdfs.setCompressionAlias(useAlias ? codec.getClass().getSimpleName() : codec.getClass().getName());
+		ResourceSerializationFormat sFormat;
+		{
+			sFormat = new ResourceSerializationFormat();
 
-		hdfs.write(source, destination);
+			sFormat.setConfiguration(hdfs.configuration);
+			sFormat.setCompressionAlias(useAlias ? codec.getClass().getSimpleName() : codec.getClass().getName());
+		}
+
+		hdfs.setSerializationFormat(sFormat);
+
+		hdfs.write(sourceResource, destination);
 
 		// expected destination on hdfs should have codec extension appended
-		assertHdfsFileExists(destination + codec.getDefaultExtension());
+		assertHdfsFileExists(destination + sFormat.getExtension());
 	}
 
 	/**
@@ -362,7 +383,7 @@ public class HdfsWriterTest {
 	 * @return Hdfs file destination calculated from the source. The file name is appended with the timestamp. The
 	 * extension is kept the same.
 	 */
-	private String destination(Class<?> objectClass, SerializationFormatSupport serialization, boolean compress) {
+	private String destination(Class<?> objectClass, SerializationFormat<?> serialization, boolean compress) {
 
 		String destination = hdfsOutputDir;
 
@@ -383,7 +404,7 @@ public class HdfsWriterTest {
 				.exists());
 	}
 
-	private <T> void testSerializationWrite(Class<T> objectClass, SerializationFormatSupport serialization,
+	private <T> void testSerializationWrite(Class<T> objectClass, CompressedSerializationFormat<?> serialization,
 			boolean compress) throws Exception {
 
 		List<T> objects = new ArrayList<T>();
@@ -394,14 +415,14 @@ public class HdfsWriterTest {
 
 		String destination = destination(objectClass, serialization, compress);
 
-		hdfs.setSerializationFormat(serialization);
-
 		if (compress) {
 			// Use default Hadoop compression (via its alias) also supported by Avro!
-			hdfs.setCompressionAlias("deflate");
+			serialization.setCompressionAlias("deflate");
 		}
 
-		hdfs.write(objects, objectClass, destination);
+		hdfs.setSerializationFormat(serialization);
+		
+		hdfs.write(objects, destination);
 
 		assertHdfsFileExists(destination);
 

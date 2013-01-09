@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2012 the original author or authors.
+ * Copyright 2013 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.springframework.data.hadoop.fs;
+package org.springframework.data.hadoop.serialization;
 
 /**
  * An instance of this interface is responsible to provide a key for an object that is written to HDFS using a
@@ -22,8 +22,6 @@ package org.springframework.data.hadoop.fs;
  * 
  * @author Alex Savov
  */
-// @Costin: Should we somehow utilize ConversionService/[Generic]Converter or conform to its design?
-// Should we go with generic types? Any Comments?
 public interface SerializationKeyProvider {
 
 	/**

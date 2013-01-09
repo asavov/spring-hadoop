@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2012 the original author or authors.
+ * Copyright 2013 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.springframework.data.hadoop.fs;
+package org.springframework.data.hadoop.serialization;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -32,8 +32,6 @@ import org.springframework.util.Assert;
  * 
  * @author Alex Savov
  */
-// @Costin: Is there a class that provides reflective info (TypeDescriptor) and property access based on Class.
-// Both beans.PropertyAccessor and expression.PropertyAccessor interfaces provide metadata only by object instance.
 public class ReflectiveSerializationKeyProvider extends ReflectivePropertyAccessor implements SerializationKeyProvider {
 
 	/* The name of the property (either getter method or field) to use as key. */
@@ -50,9 +48,6 @@ public class ReflectiveSerializationKeyProvider extends ReflectivePropertyAccess
 	 * @param propertyName The name of the property (either getter method or field) to use as key.
 	 */
 	public ReflectiveSerializationKeyProvider(Class<?> objectClass, String propertyName) {
-
-		// @Costin: Unfortunately [Reflective]PropertyAccessor does not provide access to underlying TypeDescriptor,
-		// so we need manually to extra it and mimic [can]Read method. Is there a better way to achieve that?
 
 		// Try to resolve from getter...
 		Method getter = findGetterForProperty(propertyName, objectClass, false);

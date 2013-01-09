@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2012 the original author or authors.
+ * Copyright 2013 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,13 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.springframework.data.hadoop.fs;
+package org.springframework.data.hadoop.serialization;
 
 import org.apache.avro.Schema;
 import org.apache.avro.hadoop.io.AvroSerialization;
 import org.apache.avro.mapred.AvroKey;
 import org.apache.avro.mapred.AvroValue;
 import org.apache.avro.reflect.ReflectData;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.SequenceFile;
 
 /**
@@ -28,14 +29,20 @@ import org.apache.hadoop.io.SequenceFile;
  * 
  * @author Alex Savov
  */
-public class AvroSequenceFileFormat extends SequenceFileFormatSupport {
+public class AvroSequenceFileFormat<T> extends AbstractSequenceFileFormat<T> {
+
+	public AvroSequenceFileFormat(Class<T> objectsClass) {
+		super(objectsClass);
+	}
 
 	@Override
 	@SuppressWarnings("unchecked")
-	protected <T> void doInit(Iterable<? extends T> objects, Class<T> objectsClass, HdfsResource hdfsResource) {
+	public void setConfiguration(Configuration config) {
+
+		super.setConfiguration(config);
 
 		// Reflective Avro schema of key class
-		Schema keySchema = ReflectData.get().getSchema(serializationKeyProvider.getKeyClass(objectsClass));
+		Schema keySchema = ReflectData.get().getSchema(getSerializationKeyProvider().getKeyClass(objectsClass));
 
 		AvroSerialization.setKeyWriterSchema(getConfiguration(), keySchema);
 
@@ -59,7 +66,7 @@ public class AvroSequenceFileFormat extends SequenceFileFormatSupport {
 	 */
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	protected Object getKey(Object object) {
-		return new AvroKey(serializationKeyProvider.getKey(object));
+		return new AvroKey(getSerializationKeyProvider().getKey(object));
 	}
 
 	/**

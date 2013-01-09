@@ -1,0 +1,151 @@
+/*
+ * Copyright 2013 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.springframework.data.hadoop.serialization;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.Collection;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.io.SequenceFile;
+import org.apache.hadoop.io.SequenceFile.CompressionType;
+import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.serializer.Serialization;
+import org.apache.hadoop.io.serializer.SerializationFactory;
+import org.springframework.util.Assert;
+
+/**
+ * The class provides support needed by {@link SerializationFormat} implementations that serialize objects based on
+ * their type using {@link SequenceFile} pluggable serialization framework.
+ * 
+ * @see {@link Serialization}
+ * @see {@link SerializationFactory}
+ * 
+ * @author Alex Savov
+ */
+public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSerializationFormat<T> {
+
+	protected static final String HADOOP_IO_SERIALIZATIONS = "io.serializations";
+
+	private Configuration configuration;
+
+	/* This property is publicly configurable. */
+	private SerializationKeyProvider serializationKeyProvider = NullSerializationKeyProvider.INSTANCE;
+
+	protected AbstractSequenceFileFormat(Class<T> objectsClass) {
+		super(objectsClass);
+	}
+
+	/**
+	 * Sets the Hadoop configuration for this <code>SerializationFormat</code>.
+	 * 
+	 * @param configuration The configuration to use.
+	 */
+	public void setConfiguration(Configuration configuration) {
+		// TODO: @Costin: Should we clone passed Configuration or should we use it as it is?
+		// My take is to clone it cause it's changed by 'register' method. Or is that a responsibility of the caller?
+		this.configuration = configuration;
+	}
+
+	protected Configuration getConfiguration() {
+		return configuration;
+	}
+
+	/**
+	 * @param serializationKey
+	 */
+	public void setSerializationKeyProvider(SerializationKeyProvider serializationKey) {
+		this.serializationKeyProvider = serializationKey;
+	}
+
+	protected SerializationKeyProvider getSerializationKeyProvider() {
+		return serializationKeyProvider;
+	}
+	
+	/**
+	 * A template method writing objects to Hadoop using {@link SequenceFile} serialization.
+	 * 
+	 * @see {@link SequenceFile#Writer}
+	 */
+	@Override
+	public void serialize(Iterable<? extends T> objects, OutputStream outputStream) throws IOException {
+
+		Assert.notNull(getConfiguration(), "A non-null Hadoop configuration is required.");
+
+		Assert.isInstanceOf(FSDataOutputStream.class, outputStream);
+
+		CompressionCodec codec = HdfsWriter.getHadoopCodec(getConfiguration(), getCompressionAlias());
+
+		CompressionType compressionType = codec == null ? CompressionType.NONE : CompressionType.BLOCK;
+
+		// Delegate to Hadoop built-in SeqFile support
+		SequenceFile.Writer writer = SequenceFile.createWriter(configuration,
+				FSDataOutputStream.class.cast(outputStream), getKeyClass(objectsClass), getValueClass(objectsClass),
+				compressionType, codec);
+
+		try {
+			// Loop through passed objects and write them
+			for (T object : objects) {
+				writer.append(getKey(object), getValue(object));
+			}
+		} finally {
+			IOUtils.closeStream(writer);
+		}
+	}
+
+	/**
+	 * @return <b>.seqfile</b> is the default file extension for {@link SequenceFile} serialization.
+	 */
+	@Override
+	public String getExtension() {
+		return ".seqfile";
+	}
+
+	protected abstract Class<?> getKeyClass(Class<?> objectsClass);
+
+	protected abstract Object getKey(Object object);
+
+	protected abstract Class<?> getValueClass(Class<?> objectsClass);
+
+	protected abstract Object getValue(Object object);
+
+	/**
+	 * Adds the {@link Serialization} scheme to the configuration, so {@link SerializationFactory} instances are aware
+	 * of it.
+	 * 
+	 * @param serializationClass The Serialization class to register to underlying configuration.
+	 */
+	@SuppressWarnings("rawtypes")
+	protected void register(Class<? extends Serialization>... serializationClasses) {
+
+		Collection<String> serializations = getConfiguration().getStringCollection(HADOOP_IO_SERIALIZATIONS);
+
+		for (Class<?> serializationClass : serializationClasses) {
+
+			if (!serializations.contains(serializationClass.getName())) {
+
+				serializations.add(serializationClass.getName());
+			}
+		}
+
+		getConfiguration().setStrings(HADOOP_IO_SERIALIZATIONS,
+				serializations.toArray(new String[serializations.size()]));
+	}
+
+}

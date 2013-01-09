@@ -27,10 +27,8 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RawLocalFileSystem;
-import org.apache.hadoop.io.compress.CodecPool;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
-import org.apache.hadoop.io.compress.Decompressor;
 import org.springframework.core.io.ContextResource;
 import org.springframework.core.io.Resource;
 import org.springframework.util.Assert;
@@ -41,7 +39,7 @@ import org.springframework.util.StringUtils;
  *  
  * @author Costin Leau
  */
-class HdfsResource implements ContextResource {
+public class HdfsResource implements ContextResource {
 	//implements WritableResource,
 
 	private final String location;
