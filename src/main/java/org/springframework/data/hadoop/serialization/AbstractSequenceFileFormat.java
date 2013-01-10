@@ -28,6 +28,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.serializer.Serialization;
 import org.apache.hadoop.io.serializer.SerializationFactory;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.util.Assert;
 
 /**
@@ -39,17 +40,20 @@ import org.springframework.util.Assert;
  * 
  * @author Alex Savov
  */
-public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSerializationFormat<T> {
+public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSerializationFormat<T> implements InitializingBean {
 
 	protected static final String HADOOP_IO_SERIALIZATIONS = "io.serializations";
 
+	/* This property is publicly configurable. */
 	private Configuration configuration;
 
 	/* This property is publicly configurable. */
-	private SerializationKeyProvider serializationKeyProvider = NullSerializationKeyProvider.INSTANCE;
+	private SerializationKeyProvider serializationKeyProvider;
 
 	protected AbstractSequenceFileFormat(Class<T> objectsClass) {
 		super(objectsClass);
+		
+		serializationKeyProvider = NullSerializationKeyProvider.INSTANCE;
 	}
 
 	/**
@@ -58,8 +62,6 @@ public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSeria
 	 * @param configuration The configuration to use.
 	 */
 	public void setConfiguration(Configuration configuration) {
-		// TODO: @Costin: Should we clone passed Configuration or should we use it as it is?
-		// My take is to clone it cause it's changed by 'register' method. Or is that a responsibility of the caller?
 		this.configuration = configuration;
 	}
 
@@ -78,19 +80,26 @@ public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSeria
 		return serializationKeyProvider;
 	}
 	
+	@Override
+	public void afterPropertiesSet() throws Exception {
+		Assert.notNull(getConfiguration(), "A non-null Hadoop configuration is required.");
+		Assert.notNull(getSerializationKeyProvider(), "A non-null SerializationKeyProvider is required.");
+		
+		// TODO: @Costin: Should we clone passed Configuration or should we use it as it is?
+		// My take is to clone it cause it's changed by 'register' method. Or is that a responsibility of the caller?		
+	}
+
 	/**
-	 * A template method writing objects to Hadoop using {@link SequenceFile} serialization.
+	 * Writes objects to Hadoop using {@link SequenceFile} serialization.
 	 * 
 	 * @see {@link SequenceFile#Writer}
 	 */
 	@Override
 	public void serialize(Iterable<? extends T> objects, OutputStream outputStream) throws IOException {
 
-		Assert.notNull(getConfiguration(), "A non-null Hadoop configuration is required.");
-
 		Assert.isInstanceOf(FSDataOutputStream.class, outputStream);
 
-		CompressionCodec codec = HdfsWriter.getHadoopCodec(getConfiguration(), getCompressionAlias());
+		CompressionCodec codec = CompressionUtils.getHadoopCompression(getConfiguration(), getCompressionAlias());
 
 		CompressionType compressionType = codec == null ? CompressionType.NONE : CompressionType.BLOCK;
 
@@ -132,9 +141,9 @@ public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSeria
 	 * @param serializationClass The Serialization class to register to underlying configuration.
 	 */
 	@SuppressWarnings("rawtypes")
-	protected void register(Class<? extends Serialization>... serializationClasses) {
+	protected static void registerSeqFileSerialization(Configuration conf, Class<? extends Serialization>... serializationClasses) {
 
-		Collection<String> serializations = getConfiguration().getStringCollection(HADOOP_IO_SERIALIZATIONS);
+		Collection<String> serializations = conf.getStringCollection(HADOOP_IO_SERIALIZATIONS);
 
 		for (Class<?> serializationClass : serializationClasses) {
 
@@ -144,7 +153,7 @@ public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSeria
 			}
 		}
 
-		getConfiguration().setStrings(HADOOP_IO_SERIALIZATIONS,
+		conf.setStrings(HADOOP_IO_SERIALIZATIONS,
 				serializations.toArray(new String[serializations.size()]));
 	}
 

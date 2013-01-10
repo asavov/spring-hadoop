@@ -20,12 +20,10 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 import org.apache.avro.Schema;
-import org.apache.avro.file.CodecFactory;
 import org.apache.avro.file.DataFileWriter;
 import org.apache.avro.reflect.ReflectData;
 import org.apache.avro.reflect.ReflectDatumWriter;
 import org.apache.hadoop.io.IOUtils;
-import org.springframework.util.StringUtils;
 
 /**
  * Serialization format for writing POJOs using <code>Avro</code> serialization.
@@ -46,7 +44,7 @@ public class AvroFormat<T> extends AbstractObjectsSerializationFormat<T> {
 
 			writer = new DataFileWriter<T>(new ReflectDatumWriter<T>(schema));
 
-			writer.setCodec(getCompression());
+			writer.setCodec(CompressionUtils.getAvroCompression(getCompressionAlias()));
 
 			writer.create(schema, outputStream);
 
@@ -64,11 +62,6 @@ public class AvroFormat<T> extends AbstractObjectsSerializationFormat<T> {
 	@Override
 	public String getExtension() {
 		return ".avro";
-	}
-
-	protected CodecFactory getCompression() {
-		return StringUtils.hasText(getCompressionAlias()) ? CodecFactory.fromString(getCompressionAlias())
-				: CodecFactory.nullCodec();
 	}
 
 }

@@ -20,14 +20,10 @@ import java.io.OutputStream;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.IOUtils;
-import org.apache.hadoop.io.compress.CompressionCodec;
-import org.apache.hadoop.io.compress.CompressionCodecFactory;
-import org.apache.hadoop.util.ReflectionUtils;
 import org.springframework.data.hadoop.HadoopException;
 import org.springframework.data.hadoop.fs.HdfsResource;
 import org.springframework.data.hadoop.fs.HdfsResourceLoader;
 import org.springframework.util.Assert;
-import org.springframework.util.ClassUtils;
 import org.springframework.util.StringUtils;
 
 /**
@@ -80,8 +76,10 @@ public class HdfsWriter {
 	}
 
 	/**
-	 * @param source
-	 * @param destination
+	 * Write source object into HDFS.
+	 * 
+	 * @param source The source object to write.
+	 * @param destination The HDFS destination file path to write the source to.
 	 */
 	public <T> void write(T source, String destination) {
 		if (source == null) {
@@ -89,30 +87,17 @@ public class HdfsWriter {
 			return;
 		}
 
-		Assert.notNull(destination, "A non-null destination path is required.");
-
-		SerializationFormat<T> serializationFormat = (SerializationFormat<T>) getSerializationFormat();
+		SerializationFormat<?> serializationFormat = getSerializationFormat();
 
 		Assert.notNull(serializationFormat, "A non-null serialization format is required.");
 
 		OutputStream outputStream = null;
 		try {
-			// Append SerializationFormat extension to the destination (if not present)
-			String extension = serializationFormat.getExtension();
-			if (StringUtils.hasText(extension)) {
-				if (!destination.toLowerCase().endsWith(extension.toLowerCase())) {
-					destination += extension;
-				}
-			}
-
-			// Resolve destination to HDFS Resource.
-			HdfsResource hdfsDestinationResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
-
 			// Open destination resource for writing.
-			outputStream = hdfsDestinationResource.getOutputStream();
+			outputStream = createOutputStream(serializationFormat, destination);
 
 			// Delegate to core SerializationFormat logic.
-			serializationFormat.serialize(source, outputStream);
+			((SerializationFormat<T>) serializationFormat).serialize(source, outputStream);
 
 		} catch (IOException ioExc) {
 			throw new HadoopException("Cannot write the source object to HDFS: " + ioExc.getMessage(), ioExc);
@@ -122,46 +107,31 @@ public class HdfsWriter {
 	}
 
 	/**
-	 * @param conf Hadoop configuration to use.
-	 * @param compressionAlias <ul>
-	 * <li>The short class name (without the package) of the compression codec that is specified within Hadoop
-	 * configuration (under <i>io.compression.codecs</i> prop). If the short class name ends with 'Codec', then there
-	 * are two aliases for the codec - the complete short class name and the short class name without the 'Codec'
-	 * ending. For example for the 'GzipCodec' codec class name the alias are 'gzip' and 'gzipcodec' (case insensitive).
-	 * If the codec is configured to be used by Hadoop this is the preferred way instead of passing the codec canonical
-	 * name.</li>
-	 * <li>The canonical class name of the compression codec that is specified within Hadoop configuration (under
-	 * <i>io.compression.codecs</i> prop) or is present on the classpath.</li>
-	 * </ul>
-	 * 
-	 * @return The codec to be used to compress the data on the fly while storing it onto HDFS, if the
-	 * <code>compressionAlias</code> property is specified; <code>null</code> otherwise.
-	 * 
-	 * @throws IllegalArgumentException if the codec class name is not resolvable
-	 * @throws RuntimeException if the codec class is not instantiable
+	 * @param serializationFormat A non-null serialization format to be used to serialize source to HDFS destination.
+	 * @param destination The HDFS destination file path to write the source to.
+	 * @return The output stream used to write to HDFS at provided destination.
+	 * @throws IOException
 	 */
-	protected static CompressionCodec getHadoopCodec(Configuration conf, String compressionAlias) {
+	// TODO: Is it reasonable to expose HdsfOutputStreamCreator interface to the user?
+	protected OutputStream createOutputStream(SerializationFormat<?> serializationFormat, String destination)
+			throws IOException {
 
-		if (!StringUtils.hasText(compressionAlias)) {
-			return null;
+		Assert.notNull(destination, "A non-null destination path is required.");
+
+		// Append SerializationFormat extension to the destination (if not present)
+		String extension = serializationFormat.getExtension();
+
+		if (StringUtils.hasText(extension)) {
+			if (!destination.toLowerCase().endsWith(extension.toLowerCase())) {
+				destination += extension;
+			}
 		}
 
-		final CompressionCodecFactory codecFactory = new CompressionCodecFactory(conf);
+		// Resolve destination to HDFS Resource.
+		HdfsResource hdfsDestinationResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
 
-		// Find codec by canonical class name or by codec alias as specified in Hadoop configuration
-		CompressionCodec compression = codecFactory.getCodecByName(compressionAlias);
-
-		// If the codec is not configured within Hadoop try to load it from the classpath
-		if (compression == null) {
-			Class<?> compressionClass = ClassUtils
-					.resolveClassName(compressionAlias, HdfsWriter.class.getClassLoader());
-
-			// Instantiate codec and initialize it from configuration
-			// org.apache.hadoop.util.ReflectionUtils design is specific to Hadoop env :)
-			compression = (CompressionCodec) ReflectionUtils.newInstance(compressionClass, conf);
-		}
-
-		return compression;
+		// Open destination resource for writing.
+		return hdfsDestinationResource.getOutputStream();
 	}
 
 }

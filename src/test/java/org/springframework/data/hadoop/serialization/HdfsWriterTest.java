@@ -101,7 +101,7 @@ public class HdfsWriterTest {
 	private AbstractSequenceFileFormat<?> SEQUENCE_FILE_AVRO;
 
 	@Before
-	public void initSerializationFormats() {
+	public void initSerializationFormats() throws Exception {
 
 		// TODO: If we decide to clone Configuration for every SerializationFormat then this code is required.
 		/*
@@ -121,14 +121,18 @@ public class HdfsWriterTest {
 
 		// NOTE: So far we share the same Configuration between SerializationFormats.
 
-		(SEQUENCE_FILE_WRITABLE = new SequenceFileFormat<PojoWritable>(PojoWritable.class))
-				.setConfiguration(hdfs.configuration);
+		SEQUENCE_FILE_WRITABLE = new SequenceFileFormat<PojoWritable>(PojoWritable.class);
+		SEQUENCE_FILE_WRITABLE.setConfiguration(hdfs.configuration);
+		SEQUENCE_FILE_WRITABLE.afterPropertiesSet();
 
-		(SEQUENCE_FILE_JAVA = new SequenceFileFormat<PojoSerializable>(PojoSerializable.class))
-				.setConfiguration(hdfs.configuration);
+		SEQUENCE_FILE_JAVA = new SequenceFileFormat<PojoSerializable>(PojoSerializable.class);
+		SEQUENCE_FILE_JAVA.setConfiguration(hdfs.configuration);
+		SEQUENCE_FILE_JAVA.afterPropertiesSet();
 
-		(SEQUENCE_FILE_AVRO = new AvroSequenceFileFormat<PojoSerializable>(PojoSerializable.class))
-				.setConfiguration(hdfs.configuration);
+
+		SEQUENCE_FILE_AVRO = new AvroSequenceFileFormat<PojoSerializable>(PojoSerializable.class);
+		SEQUENCE_FILE_AVRO.setConfiguration(hdfs.configuration);
+		SEQUENCE_FILE_AVRO.afterPropertiesSet();
 
 		AVRO = new AvroFormat<PojoSerializable>(PojoSerializable.class);
 	}

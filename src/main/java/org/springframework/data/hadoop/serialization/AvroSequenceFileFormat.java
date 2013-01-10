@@ -20,7 +20,6 @@ import org.apache.avro.hadoop.io.AvroSerialization;
 import org.apache.avro.mapred.AvroKey;
 import org.apache.avro.mapred.AvroValue;
 import org.apache.avro.reflect.ReflectData;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.SequenceFile;
 
 /**
@@ -37,9 +36,9 @@ public class AvroSequenceFileFormat<T> extends AbstractSequenceFileFormat<T> {
 
 	@Override
 	@SuppressWarnings("unchecked")
-	public void setConfiguration(Configuration config) {
+	public void afterPropertiesSet() throws Exception {
 
-		super.setConfiguration(config);
+		super.afterPropertiesSet();
 
 		// Reflective Avro schema of key class
 		Schema keySchema = ReflectData.get().getSchema(getSerializationKeyProvider().getKeyClass(objectsClass));
@@ -51,7 +50,7 @@ public class AvroSequenceFileFormat<T> extends AbstractSequenceFileFormat<T> {
 
 		AvroSerialization.setValueWriterSchema(getConfiguration(), valueSchema);
 
-		register(AvroSerialization.class);
+		registerSeqFileSerialization(getConfiguration(), AvroSerialization.class);
 	}
 
 	/**

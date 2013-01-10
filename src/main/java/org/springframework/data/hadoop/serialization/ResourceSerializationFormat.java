@@ -44,7 +44,7 @@ public class ResourceSerializationFormat extends CompressedSerializationFormat<R
 		try {
 			inputStream = source.getInputStream();
 
-			CompressionCodec codec = HdfsWriter.getHadoopCodec(getConfiguration(), getCompressionAlias());
+			CompressionCodec codec = CompressionUtils.getHadoopCompression(getConfiguration(), getCompressionAlias());
 
 			// Apply compression
 			if (codec != null) {
@@ -53,7 +53,7 @@ public class ResourceSerializationFormat extends CompressedSerializationFormat<R
 			}
 
 			// Write source to HDFS destination
-			IOUtils.copyBytes(inputStream, outputStream, configuration, /* close */false);
+			IOUtils.copyBytes(inputStream, outputStream, getConfiguration(), /* close */false);
 
 		} catch (IOException ioExc) {
 
@@ -80,7 +80,7 @@ public class ResourceSerializationFormat extends CompressedSerializationFormat<R
 	@Override
 	public String getExtension() {
 
-		CompressionCodec codec = HdfsWriter.getHadoopCodec(getConfiguration(), getCompressionAlias());
+		CompressionCodec codec = CompressionUtils.getHadoopCompression(getConfiguration(), getCompressionAlias());
 
 		return codec != null ? codec.getDefaultExtension() : "";
 	}

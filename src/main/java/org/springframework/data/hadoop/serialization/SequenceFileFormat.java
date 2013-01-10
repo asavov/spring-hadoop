@@ -17,7 +17,6 @@ package org.springframework.data.hadoop.serialization;
 
 import java.io.Serializable;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.serializer.JavaSerialization;
@@ -43,13 +42,11 @@ public class SequenceFileFormat<T> extends AbstractSequenceFileFormat<T> {
 	 * {@link SerializationFactory} instances constructed from the given configuration will be aware of it.
 	 */
 	@SuppressWarnings("unchecked")
-	public void setConfiguration(Configuration config) {
+	public void afterPropertiesSet() throws Exception {
 
-		super.setConfiguration(config);
-
-		// TODO: Maybe this code should go somewhere else? afterPropertiesSet? 
+		super.afterPropertiesSet();
 		
-		register(WritableSerialization.class, JavaSerialization.class);
+		registerSeqFileSerialization(getConfiguration(), WritableSerialization.class, JavaSerialization.class);
 	}
 
 	protected Class<?> getKeyClass(Class<?> objectClass) {
