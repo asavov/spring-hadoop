@@ -104,7 +104,7 @@ public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSeria
 		CompressionType compressionType = codec == null ? CompressionType.NONE : CompressionType.BLOCK;
 
 		// Delegate to Hadoop built-in SeqFile support
-		SequenceFile.Writer writer = SequenceFile.createWriter(configuration,
+		SequenceFile.Writer writer = SequenceFile.createWriter(getConfiguration(),
 				FSDataOutputStream.class.cast(outputStream), getKeyClass(objectsClass), getValueClass(objectsClass),
 				compressionType, codec);
 

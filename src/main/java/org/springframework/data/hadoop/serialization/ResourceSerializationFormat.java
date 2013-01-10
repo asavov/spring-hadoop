@@ -15,19 +15,23 @@
  */
 package org.springframework.data.hadoop.serialization;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.io.compress.CodecPool;
 import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.compress.CompressionOutputStream;
+import org.apache.hadoop.io.compress.Compressor;
+import org.springframework.core.convert.converter.Converter;
 import org.springframework.core.io.Resource;
 import org.springframework.data.hadoop.HadoopException;
 
 /**
- * 
- * @author asavov
+ * @author Alex Savov
  */
 public class ResourceSerializationFormat extends CompressedSerializationFormat<Resource> {
 
@@ -35,22 +39,14 @@ public class ResourceSerializationFormat extends CompressedSerializationFormat<R
 
 	@Override
 	public void serialize(Resource source, OutputStream outputStream) throws IOException {
-		if (source == null) {
-			// Silently return...
-			return;
-		}
+
+		CompressionFormat compressionFormat = new CompressionFormat(getConfiguration(), getCompressionAlias());
 
 		InputStream inputStream = null;
 		try {
 			inputStream = source.getInputStream();
 
-			CompressionCodec codec = CompressionUtils.getHadoopCompression(getConfiguration(), getCompressionAlias());
-
-			// Apply compression
-			if (codec != null) {
-				outputStream = codec.createOutputStream(outputStream);
-				// TODO: Eventually re-use underlying Compressor through CodecPool.
-			}
+			outputStream = compressionFormat.convert(outputStream);
 
 			// Write source to HDFS destination
 			IOUtils.copyBytes(inputStream, outputStream, getConfiguration(), /* close */false);
@@ -60,6 +56,7 @@ public class ResourceSerializationFormat extends CompressedSerializationFormat<R
 			throw new HadoopException("Cannot write resource: " + ioExc.getMessage(), ioExc);
 
 		} finally {
+			IOUtils.closeStream(compressionFormat);
 			IOUtils.closeStream(inputStream);
 		}
 	}
@@ -73,7 +70,7 @@ public class ResourceSerializationFormat extends CompressedSerializationFormat<R
 		this.configuration = configuration;
 	}
 
-	public Configuration getConfiguration() {
+	protected Configuration getConfiguration() {
 		return configuration;
 	}
 
@@ -83,6 +80,49 @@ public class ResourceSerializationFormat extends CompressedSerializationFormat<R
 		CompressionCodec codec = CompressionUtils.getHadoopCompression(getConfiguration(), getCompressionAlias());
 
 		return codec != null ? codec.getDefaultExtension() : "";
+	}
+
+	// TODO: An experimental class modeling compression format and
+	// encapsulating compression logic used by Serialization formats.
+	// It will be good to apply it on other Serialization formats.
+	// Unfortunately other SerFormats require re-configuration of underlying objects,
+	// such as avro.DataFileWriter and SequenceFile.Writer.
+	// In other words changing/wrapping of OutputStream is not enough.
+	// @Costin: Any thoughts :)
+	private static class CompressionFormat implements Converter<OutputStream, OutputStream>, Closeable {
+
+		private final CompressionCodec codec;
+
+		private Compressor compressor;
+
+		public CompressionFormat(Configuration configuration, String compressionAlias) {
+			codec = CompressionUtils.getHadoopCompression(configuration, compressionAlias);
+		}
+
+		@Override
+		public void close() {
+			CodecPool.returnCompressor(compressor);
+		}
+
+		@Override
+		public OutputStream convert(OutputStream outputStream) {
+
+			// If a codec is specified and if passed stream does not have compression capabilities...
+			if (codec != null && !CompressionOutputStream.class.isInstance(outputStream)) {
+
+				// Eventually re-use Compressor from underlying CodecPool
+				compressor = CodecPool.getCompressor(codec);
+
+				try {
+					// Create compression stream wrapping passed stream
+					outputStream = codec.createOutputStream(outputStream, compressor);
+				} catch (IOException ioExc) {
+					throw new HadoopException("Cannot open compressed output stream.", ioExc);
+				}
+			}
+
+			return outputStream;
+		}
 	}
 
 }
