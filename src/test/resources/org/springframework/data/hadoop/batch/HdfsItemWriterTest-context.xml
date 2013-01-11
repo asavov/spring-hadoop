@@ -1,0 +1,58 @@
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:batch="http://www.springframework.org/schema/batch" xmlns:hdp="http://www.springframework.org/schema/hadoop"
+	xmlns:c="http://www.springframework.org/schema/c" xmlns:p="http://www.springframework.org/schema/p"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+      	http://www.springframework.org/schema/batch	http://www.springframework.org/schema/batch/spring-batch.xsd
+      	http://www.springframework.org/schema/hadoop http://www.springframework.org/schema/hadoop/spring-hadoop.xsd">
+
+	<import resource="../batch-common.xml" />
+	<import resource="../hadoop-ctx.xml" />
+
+	<!-- required since Job is a class not an interface -->
+	<bean class="org.springframework.batch.core.scope.StepScope" p:proxyTargetClass="true" />
+
+	<bean id="item-reader" class="org.springframework.batch.item.support.ListItemReader">
+		<constructor-arg>
+			<bean class="org.springframework.data.hadoop.batch.HdfsItemWriterTest"
+				factory-method="createItems">
+				<constructor-arg
+					value="org.springframework.data.hadoop.serialization.HdfsWriterTest.PojoSerializable" />
+			</bean>
+		</constructor-arg>
+	</bean>
+
+	<!-- Create Java serialization format -->
+	<bean id="javaSerialization" class="org.springframework.data.hadoop.serialization.SequenceFileFormat">
+		<constructor-arg
+			value="org.springframework.data.hadoop.serialization.HdfsWriterTest.PojoSerializable" />
+
+		<property name="configuration" ref="hadoopConfiguration" />
+	</bean>
+
+	<!-- Create Avro serialization format -->
+	<bean id="avroSerialization" class="org.springframework.data.hadoop.serialization.AvroFormat">
+		<constructor-arg
+			value="org.springframework.data.hadoop.serialization.HdfsWriterTest.PojoSerializable" />
+	</bean>
+
+	<!-- Create 'write-to-hdfs' service -->
+	<bean id="hdfsWriter" class="org.springframework.data.hadoop.serialization.HdfsWriter">
+		<constructor-arg ref="hadoopResourceLoader" />
+
+		<property name="serializationFormat" ref="avroSerialization" />
+	</bean>
+
+	<!-- Create Batch ItemWriter wrapping 'write-to-hdfs' service -->
+	<bean id="hdfs-item-writer" class="org.springframework.data.hadoop.batch.HdfsItemWriter"
+		p:hdfsWriter-ref="hdfsWriter" />
+
+	<!-- Configure a single step job writing to hdfs -->
+	<job id="writeToHdfsJob" xmlns="http://www.springframework.org/schema/batch">
+		<step id="writeToHdfsJobStep">
+			<tasklet>
+				<chunk reader="item-reader" writer="hdfs-item-writer" commit-interval="10" />
+			</tasklet>
+		</step>
+	</job>
+
+</beans>

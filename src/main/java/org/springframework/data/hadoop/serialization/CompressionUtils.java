@@ -15,6 +15,7 @@
  */
 package org.springframework.data.hadoop.serialization;
 
+import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.file.CodecFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.compress.CompressionCodec;

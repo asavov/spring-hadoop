@@ -40,7 +40,8 @@ import org.springframework.util.Assert;
  * 
  * @author Alex Savov
  */
-public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSerializationFormat<T> implements InitializingBean {
+public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSerializationFormat<T> implements
+		InitializingBean {
 
 	protected static final String HADOOP_IO_SERIALIZATIONS = "io.serializations";
 
@@ -52,7 +53,7 @@ public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSeria
 
 	protected AbstractSequenceFileFormat(Class<T> objectsClass) {
 		super(objectsClass);
-		
+
 		serializationKeyProvider = NullSerializationKeyProvider.INSTANCE;
 	}
 
@@ -79,14 +80,14 @@ public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSeria
 	protected SerializationKeyProvider getSerializationKeyProvider() {
 		return serializationKeyProvider;
 	}
-	
+
 	@Override
 	public void afterPropertiesSet() throws Exception {
 		Assert.notNull(getConfiguration(), "A non-null Hadoop configuration is required.");
 		Assert.notNull(getSerializationKeyProvider(), "A non-null SerializationKeyProvider is required.");
-		
+
 		// TODO: @Costin: Should we clone passed Configuration or should we use it as it is?
-		// My take is to clone it cause it's changed by 'register' method. Or is that a responsibility of the caller?		
+		// My take is to clone it cause it's changed by 'register' method. Or is that a responsibility of the caller?
 	}
 
 	/**
@@ -97,7 +98,8 @@ public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSeria
 	@Override
 	public void serialize(Iterable<? extends T> objects, OutputStream outputStream) throws IOException {
 
-		Assert.isInstanceOf(FSDataOutputStream.class, outputStream);
+		Assert.isInstanceOf(FSDataOutputStream.class, outputStream,
+				"A FSDataOutputStream is required to write to a SeqFile.");
 
 		CompressionCodec codec = CompressionUtils.getHadoopCompression(getConfiguration(), getCompressionAlias());
 
@@ -141,7 +143,8 @@ public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSeria
 	 * @param serializationClass The Serialization class to register to underlying configuration.
 	 */
 	@SuppressWarnings("rawtypes")
-	protected static void registerSeqFileSerialization(Configuration conf, Class<? extends Serialization>... serializationClasses) {
+	protected static void registerSeqFileSerialization(Configuration conf,
+			Class<? extends Serialization>... serializationClasses) {
 
 		Collection<String> serializations = conf.getStringCollection(HADOOP_IO_SERIALIZATIONS);
 
@@ -153,8 +156,7 @@ public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSeria
 			}
 		}
 
-		conf.setStrings(HADOOP_IO_SERIALIZATIONS,
-				serializations.toArray(new String[serializations.size()]));
+		conf.setStrings(HADOOP_IO_SERIALIZATIONS, serializations.toArray(new String[serializations.size()]));
 	}
 
 }

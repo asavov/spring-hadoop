@@ -33,6 +33,7 @@ import java.util.List;
 import org.apache.avro.file.DataFileStream;
 import org.apache.avro.mapred.AvroWrapper;
 import org.apache.avro.reflect.ReflectDatumReader;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.SequenceFile;
@@ -74,6 +75,9 @@ public class HdfsWriterTest {
 	 */
 	@Autowired
 	private HdfsWriter hdfs;
+	
+	@Autowired
+	private Configuration configuration;	
 
 	/**
 	 * The file that's written to HDFS with/out compression.
@@ -122,16 +126,16 @@ public class HdfsWriterTest {
 		// NOTE: So far we share the same Configuration between SerializationFormats.
 
 		SEQUENCE_FILE_WRITABLE = new SequenceFileFormat<PojoWritable>(PojoWritable.class);
-		SEQUENCE_FILE_WRITABLE.setConfiguration(hdfs.configuration);
+		SEQUENCE_FILE_WRITABLE.setConfiguration(configuration);
 		SEQUENCE_FILE_WRITABLE.afterPropertiesSet();
 
 		SEQUENCE_FILE_JAVA = new SequenceFileFormat<PojoSerializable>(PojoSerializable.class);
-		SEQUENCE_FILE_JAVA.setConfiguration(hdfs.configuration);
+		SEQUENCE_FILE_JAVA.setConfiguration(configuration);
 		SEQUENCE_FILE_JAVA.afterPropertiesSet();
 
 
 		SEQUENCE_FILE_AVRO = new AvroSequenceFileFormat<PojoSerializable>(PojoSerializable.class);
-		SEQUENCE_FILE_AVRO.setConfiguration(hdfs.configuration);
+		SEQUENCE_FILE_AVRO.setConfiguration(configuration);
 		SEQUENCE_FILE_AVRO.afterPropertiesSet();
 
 		AVRO = new AvroFormat<PojoSerializable>(PojoSerializable.class);
@@ -149,7 +153,7 @@ public class HdfsWriterTest {
 		{
 			sFormat = new ResourceSerializationFormat();
 
-			sFormat.setConfiguration(hdfs.configuration);
+			sFormat.setConfiguration(configuration);
 		}
 
 		hdfs.setSerializationFormat(sFormat);
@@ -249,7 +253,7 @@ public class HdfsWriterTest {
 	public void testCompressedWriteUsingHadoopCodecAlias() throws IOException {
 
 		// DefaultCodec is configured by Hadoop by default
-		final CompressionCodec codec = new CompressionCodecFactory(hdfs.configuration)
+		final CompressionCodec codec = new CompressionCodecFactory(configuration)
 				.getCodecByName(DefaultCodec.class.getSimpleName());
 
 		testCompressedWrite(codec, /* useCodecAlias */true);
@@ -262,7 +266,7 @@ public class HdfsWriterTest {
 	public void testCompressedWriteUsingHadoopCodecClassName() throws IOException {
 
 		// GzipCodec is configured by Hadoop by default
-		final CompressionCodec codec = new CompressionCodecFactory(hdfs.configuration).getCodecByName(GzipCodec.class
+		final CompressionCodec codec = new CompressionCodecFactory(configuration).getCodecByName(GzipCodec.class
 				.getSimpleName());
 
 		testCompressedWrite(codec, /* useCodecAlias */false);
@@ -294,9 +298,9 @@ public class HdfsWriterTest {
 		final StringBuilder exceptions = new StringBuilder();
 
 		// Get a list of all codecs supported by Hadoop
-		for (Class<? extends CompressionCodec> codecClass : CompressionCodecFactory.getCodecClasses(hdfs.configuration)) {
+		for (Class<? extends CompressionCodec> codecClass : CompressionCodecFactory.getCodecClasses(configuration)) {
 			try {
-				testCompressedWrite(ReflectionUtils.newInstance(codecClass, hdfs.configuration), /* useCodecAlias */true);
+				testCompressedWrite(ReflectionUtils.newInstance(codecClass, configuration), /* useCodecAlias */true);
 			} catch (Exception exc) {
 				exceptions.append(codecClass.getName() + " not supported. Details: " + exc.getMessage() + "\n");
 			}
@@ -353,7 +357,7 @@ public class HdfsWriterTest {
 		{
 			sFormat = new ResourceSerializationFormat();
 
-			sFormat.setConfiguration(hdfs.configuration);
+			sFormat.setConfiguration(configuration);
 			sFormat.setCompressionAlias(useAlias ? codec.getClass().getSimpleName() : codec.getClass().getName());
 		}
 
@@ -439,7 +443,7 @@ public class HdfsWriterTest {
 	private <T> List<T> readFromSeqFile(String destination) throws Exception {
 
 		SequenceFile.Reader reader = new SequenceFile.Reader(hdfs.hdfsResourceLoader.getFileSystem(), new Path(
-				destination), hdfs.configuration);
+				destination), configuration);
 
 		try {
 			List<T> objects = new ArrayList<T>();

@@ -18,7 +18,6 @@ package org.springframework.data.hadoop.serialization;
 import java.io.IOException;
 import java.io.OutputStream;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.IOUtils;
 import org.springframework.data.hadoop.HadoopException;
 import org.springframework.data.hadoop.fs.HdfsResource;
@@ -34,7 +33,6 @@ import org.springframework.util.StringUtils;
  */
 public class HdfsWriter {
 
-	protected final Configuration configuration;
 	protected final HdfsResourceLoader hdfsResourceLoader;
 
 	/* The property is publicly configurable. */
@@ -48,12 +46,10 @@ public class HdfsWriter {
 	 * 
 	 * @throws IllegalArgumentException if some of the parameters is <code>null</code>
 	 */
-	public HdfsWriter(Configuration configuration, HdfsResourceLoader hdfsResourceLoader) {
+	public HdfsWriter(HdfsResourceLoader hdfsResourceLoader) {
 
-		Assert.notNull(configuration, "A non-null Hadoop configuration is required.");
 		Assert.notNull(hdfsResourceLoader, "A non-null HDFS resource loader is required.");
 
-		this.configuration = configuration;
 		this.hdfsResourceLoader = hdfsResourceLoader;
 	}
 

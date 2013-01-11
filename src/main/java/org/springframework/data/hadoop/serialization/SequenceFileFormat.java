@@ -45,7 +45,7 @@ public class SequenceFileFormat<T> extends AbstractSequenceFileFormat<T> {
 	public void afterPropertiesSet() throws Exception {
 
 		super.afterPropertiesSet();
-		
+
 		registerSeqFileSerialization(getConfiguration(), WritableSerialization.class, JavaSerialization.class);
 	}
 
