@@ -18,24 +18,35 @@ package org.springframework.data.hadoop.batch;
 
 import java.util.List;
 
-import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.ExecutionContext;
+import org.springframework.batch.item.ItemStreamException;
+import org.springframework.batch.item.ItemStreamWriter;
+import org.springframework.batch.item.file.ResourceSuffixCreator;
 import org.springframework.data.hadoop.serialization.HdfsWriter;
 
 /**
  * 
  * @author Alex Savov
  */
-public class HdfsItemWriter<T> implements ItemWriter<T> {
+public class HdfsItemWriter<T> implements ItemStreamWriter<T> {
 
 	private HdfsWriter hdfsWriter;
+
+	private int calls = 0;
+	private String destination;
 	
-	private String destination = "/test/hdfs_item_writer/pojos/";
-	
-	private int numberOfChunkWrites = 0;
-	
+	private ResourceSuffixCreator destinationSuffixCreator; 
+
 	@Override
 	public void write(List<? extends T> items) throws Exception {
-		hdfsWriter.write(items, destination + (numberOfChunkWrites++));
+		
+		String destWithSuffix = destination;
+		
+		if (destinationSuffixCreator != null) {
+			destWithSuffix += destinationSuffixCreator.getSuffix(calls++);
+		}
+		
+		hdfsWriter.write(items, destWithSuffix);
 	}
 
 	/**
@@ -43,6 +54,44 @@ public class HdfsItemWriter<T> implements ItemWriter<T> {
 	 */
 	public void setHdfsWriter(HdfsWriter hdfsWriter) {
 		this.hdfsWriter = hdfsWriter;
+	}
+	
+	public void setDestination(String destination) {
+		this.destination = destination;
+	}
+	
+	public void setDestinationSuffixCreator(ResourceSuffixCreator destinationSuffixCreator) {
+		this.destinationSuffixCreator = destinationSuffixCreator;
+	}	
+	
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see org.springframework.batch.item.ItemStream#open(org.springframework.batch.item.ExecutionContext)
+	 */
+	@Override
+	public void open(ExecutionContext executionContext) throws ItemStreamException {
+		System.out.println(">>> open");
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see org.springframework.batch.item.ItemStream#update(org.springframework.batch.item.ExecutionContext)
+	 */
+	@Override
+	public void update(ExecutionContext executionContext) throws ItemStreamException {
+		System.out.println(">>> update");
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see org.springframework.batch.item.ItemStream#close()
+	 */
+	@Override
+	public void close() throws ItemStreamException {
+		System.out.println(">>> close");
 	}
 
 }

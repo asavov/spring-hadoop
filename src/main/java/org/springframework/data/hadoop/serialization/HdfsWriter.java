@@ -78,6 +78,22 @@ public class HdfsWriter {
 	 * @param destination The HDFS destination file path to write the source to.
 	 */
 	public <T> void write(T source, String destination) {
+
+		OutputStream outputStream = null;
+		try {
+			// Open destination resource for writing.
+			outputStream = createOutputStream(destination);
+
+			write(source, outputStream);
+
+		} catch (IOException ioExc) {
+			throw new HadoopException("Cannot open output stream to '" + destination + "'", ioExc);
+		} finally {
+			IOUtils.closeStream(outputStream);
+		}
+	}
+
+	public <T> void write(T source, OutputStream outputStream) {
 		if (source == null) {
 			// Silently return...
 			return;
@@ -87,18 +103,12 @@ public class HdfsWriter {
 
 		Assert.notNull(serializationFormat, "A non-null serialization format is required.");
 
-		OutputStream outputStream = null;
 		try {
-			// Open destination resource for writing.
-			outputStream = createOutputStream(serializationFormat, destination);
-
 			// Delegate to core SerializationFormat logic.
 			((SerializationFormat<T>) serializationFormat).serialize(source, outputStream);
 
 		} catch (IOException ioExc) {
 			throw new HadoopException("Cannot write the source object to HDFS: " + ioExc.getMessage(), ioExc);
-		} finally {
-			IOUtils.closeStream(outputStream);
 		}
 	}
 
@@ -109,13 +119,12 @@ public class HdfsWriter {
 	 * @throws IOException
 	 */
 	// TODO: Is it reasonable to expose HdsfOutputStreamCreator interface to the user?
-	protected OutputStream createOutputStream(SerializationFormat<?> serializationFormat, String destination)
-			throws IOException {
+	protected OutputStream createOutputStream(String destination) throws IOException {
 
 		Assert.notNull(destination, "A non-null destination path is required.");
 
 		// Append SerializationFormat extension to the destination (if not present)
-		String extension = serializationFormat.getExtension();
+		String extension = getSerializationFormat().getExtension();
 
 		if (StringUtils.hasText(extension)) {
 			if (!destination.toLowerCase().endsWith(extension.toLowerCase())) {

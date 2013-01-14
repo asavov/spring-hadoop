@@ -8,7 +8,7 @@
 	<import resource="../hadoop-ctx.xml" />
 
 	<hdp:script id="cleanScript" language="javascript" run-at-startup="true">
-		fsh.rmr("${hdfs.write.output.dir}")
+		if (fsh.test("${hdfs.writer.output.dir}")) fsh.rmr("${hdfs.writer.output.dir}")
 	</hdp:script>
 
 	<!-- The class under testing. -->

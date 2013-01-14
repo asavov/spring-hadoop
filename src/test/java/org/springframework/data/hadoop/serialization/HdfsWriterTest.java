@@ -95,7 +95,7 @@ public class HdfsWriterTest {
 	/**
 	 * All output files are written to that HDFS dir.
 	 */
-	@Value("${hdfs.write.output.dir}")
+	@Value("${hdfs.writer.output.dir}")
 	private String hdfsOutputDir;
 
 	@BeforeClass
@@ -428,12 +428,8 @@ public class HdfsWriterTest {
 	private <T> void testSerializationWrite(Class<T> objectClass, CompressedSerializationFormat<?> serialization,
 			boolean compress) throws Exception {
 
-		List<T> objects = new ArrayList<T>();
-
-		for (int i = 0; i < 5000; i++) {
-			objects.add(objectClass.newInstance());
-		}
-
+		List<T> objects = createPojoList(objectClass, 5000);
+				
 		String destination = destination(objectClass, serialization, compress);
 
 		if (compress) {
@@ -512,6 +508,17 @@ public class HdfsWriterTest {
 		}
 	}
 
+	public static <T> List<T> createPojoList(Class<T> objectClass, int size) throws Exception {
+		
+		List<T> objects = new ArrayList<T>();
+
+		for (int i = 0; i < size; i++) {
+			objects.add(objectClass.newInstance());
+		}
+		
+		return objects;		
+	}
+	
 	public static class PojoSerializable implements Serializable {
 
 		private static final long serialVersionUID = 4225081912489347353L;

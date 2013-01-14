@@ -7,16 +7,18 @@
 
 	<import resource="../batch-common.xml" />
 	<import resource="../hadoop-ctx.xml" />
+	
+	<hdp:script id="cleanScript" language="javascript" run-at-startup="true">
+		if (fsh.test("${hdfs.item.writer.output.dir}")) fsh.rmr("${hdfs.item.writer.output.dir}")
+	</hdp:script>	
 
-	<!-- required since Job is a class not an interface -->
-	<bean class="org.springframework.batch.core.scope.StepScope" p:proxyTargetClass="true" />
-
-	<bean id="item-reader" class="org.springframework.batch.item.support.ListItemReader">
+	<bean id="item-reader" class="org.springframework.batch.item.support.ListItemReader" scope="prototype">
 		<constructor-arg>
-			<bean class="org.springframework.data.hadoop.batch.HdfsItemWriterTest"
-				factory-method="createItems">
+			<bean class="org.springframework.data.hadoop.serialization.HdfsWriterTest"
+				factory-method="createPojoList">
 				<constructor-arg
 					value="org.springframework.data.hadoop.serialization.HdfsWriterTest.PojoSerializable" />
+				<constructor-arg value="100" />
 			</bean>
 		</constructor-arg>
 	</bean>
@@ -42,17 +44,38 @@
 		<property name="serializationFormat" ref="avroSerialization" />
 	</bean>
 
-	<!-- Create Batch ItemWriter wrapping 'write-to-hdfs' service -->
-	<bean id="hdfs-item-writer" class="org.springframework.data.hadoop.batch.HdfsItemWriter"
-		p:hdfsWriter-ref="hdfsWriter" />
+	<!-- Configure a single step jobs writing to hdfs using different completion policies -->
 
-	<!-- Configure a single step job writing to hdfs -->
-	<job id="writeToHdfsJob" xmlns="http://www.springframework.org/schema/batch">
-		<step id="writeToHdfsJobStep">
+	<!-- Create Batch ItemWriter wrapping 'write-to-hdfs' service -->
+	<bean id="hdfs-item-writer-chunks" class="org.springframework.data.hadoop.batch.HdfsItemWriter"
+		p:hdfsWriter-ref="hdfsWriter" p:destination="/test/hdfs_item_writer/chunks">
+
+		<property name="destinationSuffixCreator">
+			<bean class="org.springframework.batch.item.file.SimpleResourceSuffixCreator" />
+		</property>
+	</bean>
+
+	<job id="writeToHdfsJob-commit-interval" xmlns="http://www.springframework.org/schema/batch">
+		<step id="commit-interval-step">
 			<tasklet>
-				<chunk reader="item-reader" writer="hdfs-item-writer" commit-interval="10" />
+				<chunk reader="item-reader" writer="hdfs-item-writer-chunks" commit-interval="25" />
 			</tasklet>
 		</step>
 	</job>
 
+	<!-- Create Batch ItemWriter wrapping 'write-to-hdfs' service -->
+	<bean id="hdfs-item-writer-all" class="org.springframework.data.hadoop.batch.HdfsItemWriter"
+		p:hdfsWriter-ref="hdfsWriter" p:destination="/test/hdfs_item_writer/all">
+	</bean>
+
+	<bean id="completionPolicy" class="org.springframework.batch.repeat.policy.DefaultResultCompletionPolicy" />
+
+	<job id="writeToHdfsJob-default-completion" xmlns="http://www.springframework.org/schema/batch">
+		<step id="default-completion-step">
+			<tasklet>
+				<chunk reader="item-reader" writer="hdfs-item-writer-all"
+					chunk-completion-policy="completionPolicy" />
+			</tasklet>
+		</step>
+	</job>
 </beans>
