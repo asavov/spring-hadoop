@@ -48,9 +48,11 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.data.hadoop.fs.HdfsResource;
+import org.springframework.data.hadoop.scripting.HdfsScriptRunner;
 import org.springframework.expression.AccessException;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
@@ -77,7 +79,12 @@ public class HdfsWriterTest {
 	private HdfsWriter hdfs;
 	
 	@Autowired
-	private Configuration configuration;	
+	private Configuration configuration;
+	
+	// @Costin: If the script runner is not autowired it's not executed at all, even configured to run at startup!
+	// Any idea what's going on?
+	@Autowired @Qualifier("cleanScript")
+	private HdfsScriptRunner cleanScript;	
 
 	/**
 	 * The file that's written to HDFS with/out compression.
@@ -145,17 +152,18 @@ public class HdfsWriterTest {
 	 * Test write from source file to HDFS destination.
 	 */
 	@Test
-	public void testWriteSimple() {
-
-		final String destination = destination(sourceResource);
+	public void testWriteSimple() throws Exception {
 
 		ResourceSerializationFormat sFormat;
 		{
 			sFormat = new ResourceSerializationFormat();
 
 			sFormat.setConfiguration(configuration);
+			sFormat.afterPropertiesSet();
 		}
 
+		final String destination = destination(sourceResource, sFormat);
+		
 		hdfs.setSerializationFormat(sFormat);
 		
 		hdfs.write(sourceResource, destination);
@@ -250,7 +258,7 @@ public class HdfsWriterTest {
 	 * Test compressed write from source file to HDFS destination using codec alias as configured within Hadoop.
 	 */
 	@Test
-	public void testCompressedWriteUsingHadoopCodecAlias() throws IOException {
+	public void testCompressedWriteUsingHadoopCodecAlias() throws Exception {
 
 		// DefaultCodec is configured by Hadoop by default
 		final CompressionCodec codec = new CompressionCodecFactory(configuration)
@@ -263,7 +271,7 @@ public class HdfsWriterTest {
 	 * Test compressed write from source file to HDFS destination using codec class name as configured within Hadoop.
 	 */
 	@Test
-	public void testCompressedWriteUsingHadoopCodecClassName() throws IOException {
+	public void testCompressedWriteUsingHadoopCodecClassName() throws Exception {
 
 		// GzipCodec is configured by Hadoop by default
 		final CompressionCodec codec = new CompressionCodecFactory(configuration).getCodecByName(GzipCodec.class
@@ -276,7 +284,7 @@ public class HdfsWriterTest {
 	 * Test compressed write from source file to HDFS destination using user provided codec loaded from the classpath.
 	 */
 	@Test
-	public void testCompressedWriteUsingUserCodecClassName() throws IOException {
+	public void testCompressedWriteUsingUserCodecClassName() throws Exception {
 
 		// CustomCompressionCodec is NOT supported by Hadoop, but is provided by the
 		// client on the classpath
@@ -288,7 +296,7 @@ public class HdfsWriterTest {
 	/**
 	 * Test compressed write of source file against ALL codecs supported by Hadoop.
 	 */
-	// @Test
+	@Test
 	public void testCompressedWriteUsingHadoopCodecs() {
 		// Might be re-worked to support parameterized tests.
 		// See @Parameterized and Parameterized.Parameters
@@ -347,10 +355,7 @@ public class HdfsWriterTest {
 	 * @param useAlias If <code>true</code> uses <code>codec.getClass().getSimpleName()</code> as a codec alias.
 	 * Otherwise uses <code>codec.getClass().getName()</code> as a codec class name.
 	 */
-	private void testCompressedWrite(CompressionCodec codec, boolean useAlias) throws IOException {
-
-		// calculates the destination from the source.
-		final String destination = destination(sourceResource);
+	private void testCompressedWrite(CompressionCodec codec, boolean useAlias) throws Exception {
 
 		// configure compression
 		ResourceSerializationFormat sFormat;
@@ -359,8 +364,12 @@ public class HdfsWriterTest {
 
 			sFormat.setConfiguration(configuration);
 			sFormat.setCompressionAlias(useAlias ? codec.getClass().getSimpleName() : codec.getClass().getName());
+			sFormat.afterPropertiesSet();
 		}
 
+		// calculates the destination from the source.
+		final String destination = destination(sourceResource, sFormat);
+		
 		hdfs.setSerializationFormat(sFormat);
 
 		hdfs.write(sourceResource, destination);
@@ -373,12 +382,14 @@ public class HdfsWriterTest {
 	 * @return Hdfs file destination calculated from the source. The file name is appended with the timestamp. The
 	 * extension is kept the same.
 	 */
-	private String destination(Resource source) {
+	private String destination(Resource source, SerializationFormat<?> serialization) {
 
 		String destination = hdfsOutputDir;
 
 		// add file name
 		destination += removeExtension(source.getFilename());
+		// add serialization format
+		destination += "_" + serialization.getClass().getSimpleName();
 		// add time stamp
 		destination += "_" + timestamp;
 		// add file extension
@@ -397,11 +408,13 @@ public class HdfsWriterTest {
 
 		// add file name
 		destination += objectClass.getSimpleName();
-		// add time stamp
-		destination += "_" + timestamp;
+		// add serialization format
+		destination += "_" + serialization.getClass().getSimpleName();
 		// add compression
 		destination += (compress ? "_compressed" : "");
-		// add file extension specific to used serialization
+		// add time stamp
+		destination += "_" + timestamp;
+		// add file extension specific to used serialization		
 		destination += serialization.getExtension();
 
 		return destination;
