@@ -25,6 +25,7 @@ import org.springframework.batch.item.file.ResourceSuffixCreator;
 import org.springframework.data.hadoop.serialization.HdfsWriter;
 
 /**
+ * TODO: This is still work in progress. Needs to clear out its contract and functional boundaries.
  * 
  * @author Alex Savov
  */
