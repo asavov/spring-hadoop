@@ -39,8 +39,6 @@ public class ResourceSerializationFormat extends CompressedSerializationFormat<R
 
 	private Configuration configuration;
 
-	private CompressionFormat compressionFormat;
-
 	/**
 	 * Sets the Hadoop configuration for this <code>SerializationFormat</code>.
 	 * 
@@ -57,13 +55,13 @@ public class ResourceSerializationFormat extends CompressedSerializationFormat<R
 	@Override
 	public void afterPropertiesSet() throws Exception {
 		Assert.notNull(getConfiguration(), "A non-null Hadoop configuration is required.");
-
-		compressionFormat = new CompressionFormat(getConfiguration(), getCompressionAlias());
 	}
 
 	@Override
 	public void serialize(Resource source, OutputStream outputStream) throws IOException {
 
+		CompressionFormat compressionFormat = new CompressionFormat(getConfiguration(), getCompressionAlias());
+		
 		InputStream inputStream = null;
 		try {
 			inputStream = source.getInputStream();
@@ -84,9 +82,10 @@ public class ResourceSerializationFormat extends CompressedSerializationFormat<R
 		}
 	}
 
+	@SuppressWarnings("resource")
 	@Override
 	public String getExtension() {
-		return compressionFormat.getExtension();
+		return new CompressionFormat(getConfiguration(), getCompressionAlias()).getExtension();
 	}
 
 	// TODO: An experimental class modeling compression format and
@@ -137,7 +136,6 @@ public class ResourceSerializationFormat extends CompressedSerializationFormat<R
 		public String getExtension() {
 			return codec != null ? codec.getDefaultExtension() : "";
 		}
-
 	}
 
 }

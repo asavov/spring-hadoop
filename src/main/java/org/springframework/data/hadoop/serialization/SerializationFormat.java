@@ -27,6 +27,7 @@ import org.springframework.core.serializer.Serializer;
  * @see {@link AvroFormat}
  */
 public interface SerializationFormat<T> extends Serializer<T> {
+	// TODO: think about that: extends FactoryBean<OutputStream>
 
 	/**
 	 * Gets the filename extension for this kind of serialization format (such as '.avro', '.seqfile' or '.snappy').

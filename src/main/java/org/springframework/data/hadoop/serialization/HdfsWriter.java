@@ -26,13 +26,16 @@ import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 /**
- * Utility class providing 'write to HDFS' functionality. It leverages serialization formats to do the actual objects
- * serialization and thus serve as a bridge to Hadoop HDFS.
+ * Utility class providing 'write to HDFS' functionality. It leverages {@link SerializationFormat serialization formats}
+ * to do the actual objects serialization and thus serves as a bridge to Hadoop HDFS.
  * 
  * @author Alex Savov
  */
 public class HdfsWriter {
 
+	/**
+	 * Used to open HDFS resource for writing.
+	 */
 	protected final HdfsResourceLoader hdfsResourceLoader;
 
 	/* The property is publicly configurable. */
@@ -41,10 +44,7 @@ public class HdfsWriter {
 	/**
 	 * Constructs a new <code>HdfsWriter</code> instance.
 	 * 
-	 * @param configuration A non-null Hadoop configuration to use.
 	 * @param hdfsResourceLoader A non-null HDFS resource loader to use.
-	 * 
-	 * @throws IllegalArgumentException if some of the parameters is <code>null</code>
 	 */
 	public HdfsWriter(HdfsResourceLoader hdfsResourceLoader) {
 
@@ -81,18 +81,40 @@ public class HdfsWriter {
 
 		OutputStream outputStream = null;
 		try {
-			// Open destination resource for writing.
-			outputStream = createOutputStream(destination);
+			outputStream = openOutputStream(destination);
 
 			write(source, outputStream);
-
-		} catch (IOException ioExc) {
-			throw new HadoopException("Cannot open output stream to '" + destination + "'", ioExc);
+			
 		} finally {
 			IOUtils.closeStream(outputStream);
 		}
 	}
 
+	/**
+	 * Write source object into HDFS.
+	 * 
+	 * @param source The source object to write.
+	 * @param destinationResource The HDFS destination resource to write the source to.
+	 */
+	public <T> void write(T source, HdfsResource destinationResource) {
+
+		OutputStream outputStream = null;
+		try {
+			outputStream = openOutputStream(destinationResource);
+
+			write(source, outputStream);
+
+		} finally {
+			IOUtils.closeStream(outputStream);
+		}
+	}
+
+	/**
+	 * Write source object into HDFS.
+	 * 
+	 * @param source The source object to write.
+	 * @param outputStream The HDFS output stream to write the source to.
+	 */
 	public <T> void write(T source, OutputStream outputStream) {
 		if (source == null) {
 			// Silently return...
@@ -106,37 +128,75 @@ public class HdfsWriter {
 		try {
 			// Delegate to core SerializationFormat logic.
 			((SerializationFormat<T>) serializationFormat).serialize(source, outputStream);
-
 		} catch (IOException ioExc) {
 			throw new HadoopException("Cannot write the source object to HDFS: " + ioExc.getMessage(), ioExc);
 		}
 	}
 
 	/**
-	 * @param serializationFormat A non-null serialization format to be used to serialize source to HDFS destination.
-	 * @param destination The HDFS destination file path to write the source to.
+	 * @param destination The HDFS destination file path to write to.
 	 * @return The output stream used to write to HDFS at provided destination.
-	 * @throws IOException
 	 */
-	// TODO: Is it reasonable to expose HdsfOutputStreamCreator interface to the user?
-	protected OutputStream createOutputStream(String destination) throws IOException {
+	public OutputStream openOutputStream(String destination) {
 
-		Assert.notNull(destination, "A non-null destination path is required.");
+		destination = canonicalSerializationDestination(destination);
 
-		// Append SerializationFormat extension to the destination (if not present)
-		String extension = getSerializationFormat().getExtension();
+		HdfsResource hdfsResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
 
-		if (StringUtils.hasText(extension)) {
-			if (!destination.toLowerCase().endsWith(extension.toLowerCase())) {
-				destination += extension;
-			}
+		return openOutputStream(hdfsResource);
+	}
+
+	/**
+	 * @param destinationResource The HDFS destination resource to write to.
+	 * @return The output stream used to write to HDFS at provided destination.
+	 */
+	public OutputStream openOutputStream(HdfsResource destinationResource) {
+
+		destinationResource = canonicalSerializationDestination(destinationResource);
+
+		try {
+			// Open destination resource for writing.
+			return destinationResource.getOutputStream();
+		} catch (IOException ioExc) {
+			throw new HadoopException("Cannot open output stream to '" + destinationResource + "'", ioExc);
+		}
+	}
+
+	protected HdfsResource canonicalSerializationDestination(HdfsResource destinationResource) {
+
+		Assert.notNull(destinationResource, "A non-null destination resource is required.");
+
+		String destination = destinationResource.getFilename();
+
+		if (!isCanonicalSerializationDestination(destination)) {
+
+			destination = canonicalSerializationDestination(destination);
+
+			destinationResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
 		}
 
-		// Resolve destination to HDFS Resource.
-		HdfsResource hdfsDestinationResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
+		return destinationResource;
+	}
 
-		// Open destination resource for writing.
-		return hdfsDestinationResource.getOutputStream();
+	protected String canonicalSerializationDestination(String destination) {
+
+		Assert.notNull(destination, "A non-null destination is required.");
+
+		if (!isCanonicalSerializationDestination(destination)) {
+			
+			destination += getSerializationFormat().getExtension();
+		}
+
+		return destination;
+	}
+
+	protected boolean isCanonicalSerializationDestination(String destination) {
+
+		Assert.notNull(destination, "A non-null destination is required.");
+
+		String extension = getSerializationFormat().getExtension();
+
+		return StringUtils.hasText(extension) ? destination.toLowerCase().endsWith(extension.toLowerCase()) : true;
 	}
 
 }

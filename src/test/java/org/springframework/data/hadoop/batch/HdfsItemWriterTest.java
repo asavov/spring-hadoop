@@ -22,7 +22,6 @@ import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.data.hadoop.scripting.HdfsScriptRunner;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
@@ -31,29 +30,40 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
  */
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration
+// TODO: maybe split it.
 public class HdfsItemWriterTest {
-
-	// @Costin: If the script runner is not autowired it's not executed at all, even configured to run at startup!
-	// Any idea what's going on?
-	@Autowired @Qualifier("cleanScript")
-	private HdfsScriptRunner cleanScript;	
 
 	@Autowired
 	private JobLauncher jobLauncher;
-	
-	@Autowired @Qualifier("writeToHdfsJob-commit-interval")
-	private Job writeToHdfsJob_commit_interval;
-	
-	@Autowired @Qualifier("writeToHdfsJob-default-completion")
-	private Job writeToHdfsJob_default_completion;
-	
+
+	@Autowired
+	@Qualifier("hdfsItemWriterJob")
+	private Job hdfsItemWriterJob;
+
+	// @Autowired
+	// @Qualifier("hdfsItemStreamWriterJob")
+	// private Job hdfsItemStreamWriterJob;
+
+	@Autowired
+	@Qualifier("hdfsMultiResourceItemWriterJob")
+	private Job hdfsMultiResourceItemWriterJob;
+
 	@Test
-	public void testWriteToHdfsJob_commit_interval() throws Exception {
-		jobLauncher.run(writeToHdfsJob_commit_interval, new JobParameters());
+	public void hdfsItemWriterJob() throws Exception {
+
+		jobLauncher.run(hdfsItemWriterJob, new JobParameters());
 	}
-	
+
+	// @Test
+	// public void hdfsItemStreamWriterJob() throws Exception {
+	//
+	// jobLauncher.run(hdfsItemStreamWriterJob, new JobParameters());
+	// }
+
 	@Test
-	public void testWriteToHdfsJob_default_completion() throws Exception {
-		jobLauncher.run(writeToHdfsJob_default_completion, new JobParameters());
+	public void hdfsMultiResourceItemWriterJob() throws Exception {
+
+		jobLauncher.run(hdfsMultiResourceItemWriterJob, new JobParameters());
 	}
+
 }

@@ -15,9 +15,6 @@
  */
 package org.springframework.data.hadoop.serialization;
 
-import static org.apache.commons.io.FilenameUtils.EXTENSION_SEPARATOR;
-import static org.apache.commons.io.FilenameUtils.getExtension;
-import static org.apache.commons.io.FilenameUtils.removeExtension;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -44,15 +41,12 @@ import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.data.hadoop.fs.HdfsResource;
-import org.springframework.data.hadoop.scripting.HdfsScriptRunner;
 import org.springframework.expression.AccessException;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
@@ -67,8 +61,6 @@ import org.springframework.util.ClassUtils;
 @ContextConfiguration
 public class HdfsWriterTest {
 
-	private static long timestamp;
-
 	/*
 	 * The instance under testing.
 	 * 
@@ -77,14 +69,9 @@ public class HdfsWriterTest {
 	 */
 	@Autowired
 	private HdfsWriter hdfs;
-	
+
 	@Autowired
 	private Configuration configuration;
-	
-	// @Costin: If the script runner is not autowired it's not executed at all, even configured to run at startup!
-	// Any idea what's going on?
-	@Autowired @Qualifier("cleanScript")
-	private HdfsScriptRunner cleanScript;	
 
 	/**
 	 * The file that's written to HDFS with/out compression.
@@ -98,10 +85,7 @@ public class HdfsWriterTest {
 	@Value("${hdfs.writer.output.dir}")
 	private String hdfsOutputDir;
 
-	@BeforeClass
-	public static void beforeClass() {
-		timestamp = System.currentTimeMillis();
-	}
+	private ResourceSerializationFormat RESOURCE_FORMAT;
 
 	private CompressedSerializationFormat<?> AVRO;
 
@@ -113,6 +97,10 @@ public class HdfsWriterTest {
 
 	@Before
 	public void initSerializationFormats() throws Exception {
+
+		RESOURCE_FORMAT = new ResourceSerializationFormat();
+		RESOURCE_FORMAT.setConfiguration(configuration);
+		RESOURCE_FORMAT.afterPropertiesSet();
 
 		// TODO: If we decide to clone Configuration for every SerializationFormat then this code is required.
 		/*
@@ -140,7 +128,6 @@ public class HdfsWriterTest {
 		SEQUENCE_FILE_JAVA.setConfiguration(configuration);
 		SEQUENCE_FILE_JAVA.afterPropertiesSet();
 
-
 		SEQUENCE_FILE_AVRO = new AvroSequenceFileFormat<PojoSerializable>(PojoSerializable.class);
 		SEQUENCE_FILE_AVRO.setConfiguration(configuration);
 		SEQUENCE_FILE_AVRO.afterPropertiesSet();
@@ -154,21 +141,7 @@ public class HdfsWriterTest {
 	@Test
 	public void testWriteSimple() throws Exception {
 
-		ResourceSerializationFormat sFormat;
-		{
-			sFormat = new ResourceSerializationFormat();
-
-			sFormat.setConfiguration(configuration);
-			sFormat.afterPropertiesSet();
-		}
-
-		final String destination = destination(sourceResource, sFormat);
-		
-		hdfs.setSerializationFormat(sFormat);
-		
-		hdfs.write(sourceResource, destination);
-
-		assertHdfsFileExists(destination);
+		testResourceWrite(/* codec */null, /* doesnt matter */false);
 	}
 
 	/**
@@ -261,10 +234,10 @@ public class HdfsWriterTest {
 	public void testCompressedWriteUsingHadoopCodecAlias() throws Exception {
 
 		// DefaultCodec is configured by Hadoop by default
-		final CompressionCodec codec = new CompressionCodecFactory(configuration)
-				.getCodecByName(DefaultCodec.class.getSimpleName());
+		final CompressionCodec codec = new CompressionCodecFactory(configuration).getCodecByName(DefaultCodec.class
+				.getSimpleName());
 
-		testCompressedWrite(codec, /* useCodecAlias */true);
+		testResourceWrite(codec, /* useCodecAlias */true);
 	}
 
 	/**
@@ -277,7 +250,7 @@ public class HdfsWriterTest {
 		final CompressionCodec codec = new CompressionCodecFactory(configuration).getCodecByName(GzipCodec.class
 				.getSimpleName());
 
-		testCompressedWrite(codec, /* useCodecAlias */false);
+		testResourceWrite(codec, /* useCodecAlias */false);
 	}
 
 	/**
@@ -290,7 +263,7 @@ public class HdfsWriterTest {
 		// client on the classpath
 		final CompressionCodec codec = new CustomCompressionCodec();
 
-		testCompressedWrite(codec, /* useCodecAlias */false);
+		testResourceWrite(codec, /* useCodecAlias */false);
 	}
 
 	/**
@@ -308,7 +281,7 @@ public class HdfsWriterTest {
 		// Get a list of all codecs supported by Hadoop
 		for (Class<? extends CompressionCodec> codecClass : CompressionCodecFactory.getCodecClasses(configuration)) {
 			try {
-				testCompressedWrite(ReflectionUtils.newInstance(codecClass, configuration), /* useCodecAlias */true);
+				testResourceWrite(ReflectionUtils.newInstance(codecClass, configuration), /* useCodecAlias */true);
 			} catch (Exception exc) {
 				exceptions.append(codecClass.getName() + " not supported. Details: " + exc.getMessage() + "\n");
 			}
@@ -348,89 +321,60 @@ public class HdfsWriterTest {
 	}
 
 	/**
-	 * Tests core compressed write logic. Although a codec is being passed as a parameter the method under testing is
-	 * {@link HdfsWriter#write(Resource, String, String)}.
+	 * Test core Resource [compressed] write logic.
 	 * 
 	 * @param codec Used ONLY to get codec extension and its class name or alias in a type-safe manner.
 	 * @param useAlias If <code>true</code> uses <code>codec.getClass().getSimpleName()</code> as a codec alias.
 	 * Otherwise uses <code>codec.getClass().getName()</code> as a codec class name.
 	 */
-	private void testCompressedWrite(CompressionCodec codec, boolean useAlias) throws Exception {
+	private void testResourceWrite(CompressionCodec codec, boolean useAlias) throws Exception {
 
-		// configure compression
-		ResourceSerializationFormat sFormat;
-		{
-			sFormat = new ResourceSerializationFormat();
-
-			sFormat.setConfiguration(configuration);
-			sFormat.setCompressionAlias(useAlias ? codec.getClass().getSimpleName() : codec.getClass().getName());
-			sFormat.afterPropertiesSet();
+		if (codec != null) {
+			// configure compression
+			RESOURCE_FORMAT.setCompressionAlias(useAlias ? codec.getClass().getSimpleName() : codec.getClass()
+					.getName());
 		}
 
-		// calculates the destination from the source.
-		final String destination = destination(sourceResource, sFormat);
-		
-		hdfs.setSerializationFormat(sFormat);
+		// calculates the destination for Resource source.
+		String destination;
+		{
+			destination = hdfsOutputDir;
+
+			// add file name
+			destination += sourceResource.getFilename();
+			// add serialization format name
+			destination += "_" + RESOURCE_FORMAT.getClass().getSimpleName();
+		}
+
+		hdfs.setSerializationFormat(RESOURCE_FORMAT);
 
 		hdfs.write(sourceResource, destination);
 
 		// expected destination on hdfs should have codec extension appended
-		assertHdfsFileExists(destination + sFormat.getExtension());
+		assertHdfsFileExists(destination + RESOURCE_FORMAT.getExtension());
 	}
 
 	/**
-	 * @return Hdfs file destination calculated from the source. The file name is appended with the timestamp. The
-	 * extension is kept the same.
+	 * Test core write-of-objects logic.
 	 */
-	private String destination(Resource source, SerializationFormat<?> serialization) {
-
-		String destination = hdfsOutputDir;
-
-		// add file name
-		destination += removeExtension(source.getFilename());
-		// add serialization format
-		destination += "_" + serialization.getClass().getSimpleName();
-		// add time stamp
-		destination += "_" + timestamp;
-		// add file extension
-		destination += EXTENSION_SEPARATOR + getExtension(source.getFilename());
-
-		return destination;
-	}
-
-	/**
-	 * @return Hdfs file destination calculated from the source. The file name is appended with the timestamp. The
-	 * extension is kept the same.
-	 */
-	private String destination(Class<?> objectClass, SerializationFormat<?> serialization, boolean compress) {
-
-		String destination = hdfsOutputDir;
-
-		// add file name
-		destination += objectClass.getSimpleName();
-		// add serialization format
-		destination += "_" + serialization.getClass().getSimpleName();
-		// add compression
-		destination += (compress ? "_compressed" : "");
-		// add time stamp
-		destination += "_" + timestamp;
-		// add file extension specific to used serialization		
-		destination += serialization.getExtension();
-
-		return destination;
-	}
-
-	private void assertHdfsFileExists(String hdfsFile) {
-		assertTrue("'" + hdfsFile + "' file is not present on HDFS.", hdfs.hdfsResourceLoader.getResource(hdfsFile)
-				.exists());
-	}
-
 	private <T> void testSerializationWrite(Class<T> objectClass, CompressedSerializationFormat<?> serialization,
 			boolean compress) throws Exception {
 
 		List<T> objects = createPojoList(objectClass, 5000);
-				
-		String destination = destination(objectClass, serialization, compress);
+
+		String destination;
+		{
+			destination = hdfsOutputDir;
+
+			// add class name
+			destination += objectClass.getSimpleName();
+			// add serialization format name
+			destination += "_" + serialization.getClass().getSimpleName();
+			// add compression flag
+			destination += (compress ? "_compressed" : "");
+			// add serialization format extension
+			destination += serialization.getExtension();
+		}
 
 		if (compress) {
 			// Use default Hadoop compression (via its alias) also supported by Avro!
@@ -438,7 +382,7 @@ public class HdfsWriterTest {
 		}
 
 		hdfs.setSerializationFormat(serialization);
-		
+
 		hdfs.write(objects, destination);
 
 		assertHdfsFileExists(destination);
@@ -500,6 +444,11 @@ public class HdfsWriterTest {
 		}
 	}
 
+	private void assertHdfsFileExists(String hdfsFile) {
+		assertTrue("'" + hdfsFile + "' file is not present on HDFS.", hdfs.hdfsResourceLoader.getResource(hdfsFile)
+				.exists());
+	}
+
 	public static class CustomCompressionCodec extends DefaultCodec {
 
 		@Override
@@ -509,16 +458,16 @@ public class HdfsWriterTest {
 	}
 
 	public static <T> List<T> createPojoList(Class<T> objectClass, int size) throws Exception {
-		
+
 		List<T> objects = new ArrayList<T>();
 
 		for (int i = 0; i < size; i++) {
 			objects.add(objectClass.newInstance());
 		}
-		
-		return objects;		
+
+		return objects;
 	}
-	
+
 	public static class PojoSerializable implements Serializable {
 
 		private static final long serialVersionUID = 4225081912489347353L;

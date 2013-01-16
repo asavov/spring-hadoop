@@ -16,83 +16,75 @@
 
 package org.springframework.data.hadoop.batch;
 
+import static org.springframework.util.StringUtils.hasText;
+
 import java.util.List;
 
-import org.springframework.batch.item.ExecutionContext;
-import org.springframework.batch.item.ItemStreamException;
-import org.springframework.batch.item.ItemStreamWriter;
-import org.springframework.batch.item.file.ResourceSuffixCreator;
+import org.springframework.batch.item.ItemWriter;
+import org.springframework.beans.factory.InitializingBean;
+import org.springframework.core.io.Resource;
+import org.springframework.data.hadoop.fs.HdfsResource;
 import org.springframework.data.hadoop.serialization.HdfsWriter;
+import org.springframework.util.Assert;
 
 /**
- * TODO: This is still work in progress. Needs to clear out its contract and functional boundaries.
+ * Every {@link #write(List) write} goes to a single HDFS destination and overrides existing content.
+ * 
+ * @see {@link HdfsItemStreamWriter}
+ * @see {@link HdfsMultiResourceItemWriter}
  * 
  * @author Alex Savov
  */
-public class HdfsItemWriter<T> implements ItemStreamWriter<T> {
+public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 
 	private HdfsWriter hdfsWriter;
 
-	private int calls = 0;
-	private String destination;
-	
-	private ResourceSuffixCreator destinationSuffixCreator; 
+	private String hdfsDestination;
+
+	private HdfsResource hdfsResource;
 
 	@Override
-	public void write(List<? extends T> items) throws Exception {
-		
-		String destWithSuffix = destination;
-		
-		if (destinationSuffixCreator != null) {
-			destWithSuffix += destinationSuffixCreator.getSuffix(calls++);
+	public void write(List<? extends T> items) {
+
+		if (hdfsResource != null) {
+
+			hdfsWriter.write(items, hdfsResource);
+
+		} else if (hasText(hdfsDestination)) {
+
+			hdfsWriter.write(items, hdfsDestination);
+
+		} else {
+			Assert.state(false, "Set either 'destination' or 'resource' property.");
 		}
-		
-		hdfsWriter.write(items, destWithSuffix);
 	}
 
 	/**
-	 * @param hdfsWriter the hdfsWriter to set
+	 * @param hdfsWriter The {@link HdfsWriter} instance used to write to underlying Hadoop file system.
 	 */
 	public void setHdfsWriter(HdfsWriter hdfsWriter) {
 		this.hdfsWriter = hdfsWriter;
 	}
-	
+
+	/**
+	 * @param destination The HDFS destination file path to write to.
+	 */
 	public void setDestination(String destination) {
-		this.destination = destination;
-	}
-	
-	public void setDestinationSuffixCreator(ResourceSuffixCreator destinationSuffixCreator) {
-		this.destinationSuffixCreator = destinationSuffixCreator;
-	}	
-	
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see org.springframework.batch.item.ItemStream#open(org.springframework.batch.item.ExecutionContext)
-	 */
-	@Override
-	public void open(ExecutionContext executionContext) throws ItemStreamException {
-		System.out.println(">>> open");
+		hdfsDestination = destination;
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see org.springframework.batch.item.ItemStream#update(org.springframework.batch.item.ExecutionContext)
+	/**
+	 * @param resource The {@link HdfsResource} instance to write to.
 	 */
-	@Override
-	public void update(ExecutionContext executionContext) throws ItemStreamException {
-		System.out.println(">>> update");
+	public void setResource(Resource resource) {
+		Assert.isInstanceOf(HdfsResource.class, resource, "A non-null Hdfs Resource is required to write to HDFS.");
+
+		hdfsResource = (HdfsResource) resource;
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see org.springframework.batch.item.ItemStream#close()
-	 */
 	@Override
-	public void close() throws ItemStreamException {
-		System.out.println(">>> close");
+	public void afterPropertiesSet() throws Exception {
+		Assert.notNull(hdfsWriter, "A non-null HdfsWriter is required.");
 	}
 
 }
