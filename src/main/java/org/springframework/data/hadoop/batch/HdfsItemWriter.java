@@ -34,6 +34,8 @@ import org.springframework.util.Assert;
  * @see {@link HdfsMultiResourceItemWriter}
  * 
  * @author Alex Savov
+ * 
+ * @deprecated Replaced by {@link HdfsItemStreamWriter}.
  */
 public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 
