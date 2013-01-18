@@ -58,7 +58,7 @@ public class HdfsMultiResourceItemWriter<T> extends ExecutionContextUserSupport 
 		setName(ClassUtils.getShortName(HdfsMultiResourceItemWriter.class));
 	}
 
-	public void write(List<? extends T> items) {
+	public void write(List<? extends T> items) throws Exception {
 
 		String destination = baseResource + suffixCreator.getSuffix(resourceIndex++);
 

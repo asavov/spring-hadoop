@@ -16,14 +16,13 @@
 
 package org.springframework.data.hadoop.serialization;
 
+import java.io.Closeable;
 import java.io.IOException;
-import java.io.OutputStream;
 
 import org.apache.avro.Schema;
 import org.apache.avro.file.DataFileWriter;
 import org.apache.avro.reflect.ReflectData;
 import org.apache.avro.reflect.ReflectDatumWriter;
-import org.apache.hadoop.io.IOUtils;
 
 /**
  * Serialization format for writing POJOs using <code>Avro</code> serialization.
@@ -32,27 +31,30 @@ import org.apache.hadoop.io.IOUtils;
  */
 public class AvroFormat<T> extends AbstractObjectsSerializationFormat<T> {
 
+	/* Native Avro writer. */
+	private DataFileWriter<T> writer;
+
 	public AvroFormat(Class<T> objectsClass) {
 		super(objectsClass);
 	}
 
 	@Override
-	public void serialize(Iterable<? extends T> objects, OutputStream outputStream) throws IOException {
-		DataFileWriter<T> writer = null;
-		try {
-			Schema schema = ReflectData.get().getSchema(objectsClass);
+	protected Closeable doOpen() throws IOException {
+		Schema schema = ReflectData.get().getSchema(objectsClass);
 
-			writer = new DataFileWriter<T>(new ReflectDatumWriter<T>(schema));
+		writer = new DataFileWriter<T>(new ReflectDatumWriter<T>(schema));
 
-			writer.setCodec(CompressionUtils.getAvroCompression(getCompressionAlias()));
+		writer.setCodec(CompressionUtils.getAvroCompression(getCompressionAlias()));
 
-			writer.create(schema, outputStream);
+		writer.create(schema, getOutputStream());
 
-			for (T object : objects) {
-				writer.append(object);
-			}
-		} finally {
-			IOUtils.closeStream(writer);
+		return writer;
+	}
+
+	@Override
+	protected void doSerialize(Iterable<? extends T> objects) throws IOException {
+		for (T object : objects) {
+			writer.append(object);
 		}
 	}
 

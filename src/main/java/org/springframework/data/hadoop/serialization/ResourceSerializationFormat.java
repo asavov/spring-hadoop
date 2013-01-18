@@ -16,6 +16,7 @@
 package org.springframework.data.hadoop.serialization;
 
 import java.io.Closeable;
+import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -27,7 +28,6 @@ import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionOutputStream;
 import org.apache.hadoop.io.compress.Compressor;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.core.convert.converter.Converter;
 import org.springframework.core.io.Resource;
 import org.springframework.data.hadoop.HadoopException;
 import org.springframework.util.Assert;
@@ -35,8 +35,9 @@ import org.springframework.util.Assert;
 /**
  * @author Alex Savov
  */
-public class ResourceSerializationFormat extends CompressedSerializationFormat<Resource> implements InitializingBean {
+public class ResourceSerializationFormat extends SerializationFormatSupport<Resource> implements InitializingBean {
 
+	/* This property is publicly configurable. */
 	private Configuration configuration;
 
 	/**
@@ -58,83 +59,67 @@ public class ResourceSerializationFormat extends CompressedSerializationFormat<R
 	}
 
 	@Override
-	public void serialize(Resource source, OutputStream outputStream) throws IOException {
+	protected void doSerialize(Resource source) throws IOException {
 
-		CompressionFormat compressionFormat = new CompressionFormat(getConfiguration(), getCompressionAlias());
-		
 		InputStream inputStream = null;
 		try {
 			inputStream = source.getInputStream();
 
-			// Apply compression (if available)
-			outputStream = compressionFormat.convert(outputStream);
-
 			// Write source to HDFS destination
-			IOUtils.copyBytes(inputStream, outputStream, getConfiguration(), /* close */false);
+			IOUtils.copyBytes(inputStream, getOutputStream(), getConfiguration(), /* close */false);
 
 		} catch (IOException ioExc) {
 
 			throw new HadoopException("Cannot write resource: " + ioExc.getMessage(), ioExc);
 
 		} finally {
-			IOUtils.closeStream(compressionFormat);
 			IOUtils.closeStream(inputStream);
 		}
 	}
 
-	@SuppressWarnings("resource")
-	@Override
-	public String getExtension() {
-		return new CompressionFormat(getConfiguration(), getCompressionAlias()).getExtension();
+	protected Closeable doOpen() {
+
+		setOutputStream(compress(getOutputStream()));
+
+		return getOutputStream();
 	}
 
-	// TODO: An experimental class modeling compression format and
-	// encapsulating compression logic used by Serialization formats.
-	// It will be good to apply it on other Serialization formats.
-	// Unfortunately other SerFormats require re-configuration of underlying objects,
-	// such as avro.DataFileWriter and SequenceFile.Writer.
-	// In other words changing/wrapping of OutputStream is not enough.
-	// @Costin: Any thoughts :)
-	private static class CompressionFormat implements Converter<OutputStream, OutputStream>, Closeable {
+	@Override
+	public String getExtension() {
+		CompressionCodec codec = CompressionUtils.getHadoopCompression(getConfiguration(), getCompressionAlias());
 
-		private final CompressionCodec codec;
+		return codec != null ? codec.getDefaultExtension() : "";
+	}
 
-		private Compressor compressor;
-		private OutputStream compressedStream;
+	private OutputStream compress(OutputStream outputStream) {
 
-		public CompressionFormat(Configuration configuration, String compressionAlias) {
-			codec = CompressionUtils.getHadoopCompression(configuration, compressionAlias);
-		}
+		CompressionCodec codec = CompressionUtils.getHadoopCompression(getConfiguration(), getCompressionAlias());
 
-		@Override
-		public OutputStream convert(OutputStream outputStream) {
-
-			// If a codec is specified and if passed stream does not have compression capabilities...
-			if (codec != null && !CompressionOutputStream.class.isInstance(outputStream)) {
-
-				// Eventually re-use Compressor from underlying CodecPool
-				compressor = CodecPool.getCompressor(codec);
-
-				try {
-					// Create compression stream wrapping passed stream
-					return outputStream = compressedStream = codec.createOutputStream(outputStream);
-				} catch (IOException ioExc) {
-					throw new HadoopException("Cannot open compressed output stream.", ioExc);
-				}
-			}
-
+		// If a codec is specified and if passed stream does not have compression capabilities...
+		if (codec == null || CompressionOutputStream.class.isInstance(outputStream)) {
 			return outputStream;
 		}
 
-		@Override
-		public void close() {
-			IOUtils.closeStream(compressedStream);
+		try {
+			// Eventually re-use Compressor from underlying CodecPool
+			final Compressor compressor = CodecPool.getCompressor(codec);
 
-			CodecPool.returnCompressor(compressor);
-		}
+			// Create compression stream wrapping passed stream
+			CompressionOutputStream compressionStream = codec.createOutputStream(outputStream, compressor);
 
-		public String getExtension() {
-			return codec != null ? codec.getDefaultExtension() : "";
+			// Decorate the compression stream to release the Compressor upon close
+			return new FilterOutputStream(compressionStream) {
+				@Override
+				public void close() throws IOException {
+					try {
+						super.close();
+					} finally {
+						CodecPool.returnCompressor(compressor);
+					}
+				}
+			};
+		} catch (IOException ioExc) {
+			throw new HadoopException("Cannot open compressed output stream.", ioExc);
 		}
 	}
 

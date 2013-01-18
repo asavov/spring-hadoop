@@ -40,9 +40,9 @@ public class HdfsItemWriterTest {
 	@Qualifier("hdfsItemWriterJob")
 	private Job hdfsItemWriterJob;
 
-	// @Autowired
-	// @Qualifier("hdfsItemStreamWriterJob")
-	// private Job hdfsItemStreamWriterJob;
+	@Autowired
+	@Qualifier("hdfsItemStreamWriterJob")
+	private Job hdfsItemStreamWriterJob;
 
 	@Autowired
 	@Qualifier("hdfsMultiResourceItemWriterJob")
@@ -54,11 +54,11 @@ public class HdfsItemWriterTest {
 		jobLauncher.run(hdfsItemWriterJob, new JobParameters());
 	}
 
-	// @Test
-	// public void hdfsItemStreamWriterJob() throws Exception {
-	//
-	// jobLauncher.run(hdfsItemStreamWriterJob, new JobParameters());
-	// }
+	@Test
+	public void hdfsItemStreamWriterJob() throws Exception {
+
+		jobLauncher.run(hdfsItemStreamWriterJob, new JobParameters());
+	}
 
 	@Test
 	public void hdfsMultiResourceItemWriterJob() throws Exception {

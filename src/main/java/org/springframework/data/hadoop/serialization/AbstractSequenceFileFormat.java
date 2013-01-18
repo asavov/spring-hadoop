@@ -16,8 +16,8 @@
 
 package org.springframework.data.hadoop.serialization;
 
+import java.io.Closeable;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.Collection;
 
 import org.apache.hadoop.conf.Configuration;
@@ -51,6 +51,9 @@ public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSeria
 	/* This property is publicly configurable. */
 	private SerializationKeyProvider serializationKeyProvider;
 
+	/* Native SeqFile writer. */
+	private SequenceFile.Writer writer;
+
 	protected AbstractSequenceFileFormat(Class<T> objectsClass) {
 		super(objectsClass);
 
@@ -83,11 +86,35 @@ public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSeria
 
 	@Override
 	public void afterPropertiesSet() throws Exception {
-		Assert.notNull(getConfiguration(), "A non-null Hadoop configuration is required.");
-		Assert.notNull(getSerializationKeyProvider(), "A non-null SerializationKeyProvider is required.");
-
 		// TODO: @Costin: Should we clone passed Configuration or should we use it as it is?
 		// My take is to clone it cause it's changed by 'register' method. Or is that a responsibility of the caller?
+		Assert.notNull(getConfiguration(), "A non-null Hadoop configuration is required.");
+		Assert.notNull(getSerializationKeyProvider(), "A non-null SerializationKeyProvider is required.");
+	}
+
+	@Override
+	protected Closeable doOpen() throws IOException {
+
+		Assert.isInstanceOf(FSDataOutputStream.class, getOutputStream(),
+				"A FSDataOutputStream is required to write to a SeqFile.");
+
+		CompressionCodec codec = CompressionUtils.getHadoopCompression(getConfiguration(), getCompressionAlias());
+
+		CompressionType compressionType = codec == null ? CompressionType.NONE : CompressionType.BLOCK;
+
+		// Delegate to Hadoop built-in SeqFile support
+		writer = SequenceFile.createWriter(getConfiguration(), FSDataOutputStream.class.cast(getOutputStream()),
+				getKeyClass(objectsClass), getValueClass(objectsClass), compressionType, codec);
+
+		// Writer.close() does not close underlying stream and we need manually to close it.
+		// So wrap the Writer and the OutputStream into a Closeable.
+		return new Closeable() {
+			@Override
+			public void close() throws IOException {
+				IOUtils.closeStream(writer);
+				IOUtils.closeStream(getOutputStream());
+			}
+		};
 	}
 
 	/**
@@ -96,27 +123,10 @@ public abstract class AbstractSequenceFileFormat<T> extends AbstractObjectsSeria
 	 * @see {@link SequenceFile#Writer}
 	 */
 	@Override
-	public void serialize(Iterable<? extends T> objects, OutputStream outputStream) throws IOException {
-
-		Assert.isInstanceOf(FSDataOutputStream.class, outputStream,
-				"A FSDataOutputStream is required to write to a SeqFile.");
-
-		CompressionCodec codec = CompressionUtils.getHadoopCompression(getConfiguration(), getCompressionAlias());
-
-		CompressionType compressionType = codec == null ? CompressionType.NONE : CompressionType.BLOCK;
-
-		// Delegate to Hadoop built-in SeqFile support
-		SequenceFile.Writer writer = SequenceFile.createWriter(getConfiguration(),
-				FSDataOutputStream.class.cast(outputStream), getKeyClass(objectsClass), getValueClass(objectsClass),
-				compressionType, codec);
-
-		try {
-			// Loop through passed objects and write them
-			for (T object : objects) {
-				writer.append(getKey(object), getValue(object));
-			}
-		} finally {
-			IOUtils.closeStream(writer);
+	protected void doSerialize(Iterable<? extends T> objects) throws IOException {
+		// Loop through passed objects and write them
+		for (T object : objects) {
+			writer.append(getKey(object), getValue(object));
 		}
 	}
 

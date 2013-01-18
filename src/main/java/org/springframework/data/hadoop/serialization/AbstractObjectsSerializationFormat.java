@@ -23,8 +23,7 @@ package org.springframework.data.hadoop.serialization;
  */
 // TODO: The class is introduced ONLY to provide Class information about the collection of objects to write.
 // Maybe we might somehow benefit from org.springframework.data.util.TypeInformation support. Needs investigation.
-public abstract class AbstractObjectsSerializationFormat<T> extends
-		CompressedSerializationFormat<Iterable<? extends T>> {
+public abstract class AbstractObjectsSerializationFormat<T> extends SerializationFormatSupport<Iterable<? extends T>> {
 
 	/* The class of the objects that are serialized by this format. */
 	protected final Class<T> objectsClass;

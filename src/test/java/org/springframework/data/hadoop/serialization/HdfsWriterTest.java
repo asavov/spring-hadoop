@@ -53,7 +53,7 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.util.ClassUtils;
 
 /**
- * Integration test for {@link HdfsWriter} testing simple and compressed writes of a file to HDFS.
+ * Integration test for {@link SerializationFormatFactoryBean} testing simple and compressed writes of a file to HDFS.
  * 
  * @author Alex Savov
  */
@@ -68,7 +68,7 @@ public class HdfsWriterTest {
 	 * HdfsWriteTest-context.xml file.
 	 */
 	@Autowired
-	private HdfsWriter hdfs;
+	private SerializationFormatFactoryBean sfFactory;
 
 	@Autowired
 	private Configuration configuration;
@@ -87,7 +87,7 @@ public class HdfsWriterTest {
 
 	private ResourceSerializationFormat RESOURCE_FORMAT;
 
-	private CompressedSerializationFormat<?> AVRO;
+	private SerializationFormatSupport<?> AVRO;
 
 	private AbstractSequenceFileFormat<?> SEQUENCE_FILE_JAVA;
 
@@ -346,9 +346,7 @@ public class HdfsWriterTest {
 			destination += "_" + RESOURCE_FORMAT.getClass().getSimpleName();
 		}
 
-		hdfs.setSerializationFormat(RESOURCE_FORMAT);
-
-		hdfs.write(sourceResource, destination);
+		write(RESOURCE_FORMAT, sourceResource, destination);
 
 		// expected destination on hdfs should have codec extension appended
 		assertHdfsFileExists(destination + RESOURCE_FORMAT.getExtension());
@@ -357,10 +355,10 @@ public class HdfsWriterTest {
 	/**
 	 * Test core write-of-objects logic.
 	 */
-	private <T> void testSerializationWrite(Class<T> objectClass, CompressedSerializationFormat<?> serialization,
+	private <T> void testSerializationWrite(Class<T> objectClass, SerializationFormatSupport<?> serialization,
 			boolean compress) throws Exception {
 
-		List<T> objects = createPojoList(objectClass, 5000);
+		List<T> objects = createPojoList(objectClass, 1);
 
 		String destination;
 		{
@@ -381,9 +379,7 @@ public class HdfsWriterTest {
 			serialization.setCompressionAlias("deflate");
 		}
 
-		hdfs.setSerializationFormat(serialization);
-
-		hdfs.write(objects, destination);
+		write((SerializationFormat<List<? extends T>>) serialization, objects, destination);
 
 		assertHdfsFileExists(destination);
 
@@ -392,10 +388,25 @@ public class HdfsWriterTest {
 		assertEquals(objects, readObjects);
 	}
 
+	private <T> void write(SerializationFormat<T> serializationFormat, T source, String destination) throws Exception {
+
+		try {
+			// Delegate to core SerializationFormat logic.
+			sfFactory.setDestination(destination);			
+			sfFactory.setSerializationFormat(serializationFormat);
+			
+			serializationFormat = (SerializationFormat<T>) sfFactory.getObject();
+			
+			serializationFormat.serialize(source);
+		} finally {
+			IOUtils.closeStream(serializationFormat);
+		}
+	}
+
 	@SuppressWarnings("unchecked")
 	private <T> List<T> readFromSeqFile(String destination) throws Exception {
 
-		SequenceFile.Reader reader = new SequenceFile.Reader(hdfs.hdfsResourceLoader.getFileSystem(), new Path(
+		SequenceFile.Reader reader = new SequenceFile.Reader(sfFactory.hdfsResourceLoader.getFileSystem(), new Path(
 				destination), configuration);
 
 		try {
@@ -424,7 +435,7 @@ public class HdfsWriterTest {
 		DataFileStream<T> reader = null;
 		InputStream inputStream = null;
 		try {
-			HdfsResource hdfsResource = (HdfsResource) hdfs.hdfsResourceLoader.getResource(destination);
+			HdfsResource hdfsResource = (HdfsResource) sfFactory.hdfsResourceLoader.getResource(destination);
 
 			inputStream = hdfsResource.getInputStream();
 
@@ -445,7 +456,7 @@ public class HdfsWriterTest {
 	}
 
 	private void assertHdfsFileExists(String hdfsFile) {
-		assertTrue("'" + hdfsFile + "' file is not present on HDFS.", hdfs.hdfsResourceLoader.getResource(hdfsFile)
+		assertTrue("'" + hdfsFile + "' file is not present on HDFS.", sfFactory.hdfsResourceLoader.getResource(hdfsFile)
 				.exists());
 	}
 

@@ -16,10 +16,14 @@
 
 package org.springframework.data.hadoop.batch;
 
+import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.io.IOUtils;
-import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.ExecutionContext;
+import org.springframework.batch.item.ItemStreamException;
+import org.springframework.batch.item.ItemStreamSupport;
+import org.springframework.batch.item.file.ResourceAwareItemWriterItemStream;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.core.io.Resource;
 import org.springframework.data.hadoop.fs.HdfsResource;
@@ -28,14 +32,16 @@ import org.springframework.data.hadoop.serialization.SerializationFormatFactoryB
 import org.springframework.util.Assert;
 
 /**
- * Every {@link #write(List) write} goes to a single HDFS destination and overrides existing content.
+ * Multiple {@link #write(List) writes} demarcated by {@link #open(ExecutionContext) open} and {@link #close() close}
+ * methods are aggregated and go to a single HDFS destination.
  * 
- * @see {@link HdfsItemStreamWriter}
+ * @see {@link HdfsItemWriter}
  * @see {@link HdfsMultiResourceItemWriter}
  * 
  * @author Alex Savov
  */
-public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
+public class HdfsItemStreamWriter<T> extends ItemStreamSupport implements ResourceAwareItemWriterItemStream<T>,
+		InitializingBean {
 
 	private SerializationFormatFactoryBean<Iterable<? extends T>> sfFactory;
 
@@ -43,18 +49,14 @@ public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 
 	private HdfsResource hdfsResource;
 
+	private SerializationFormat<Iterable<? extends T>> serializationFormat;
+
 	@Override
-	public void write(List<? extends T> items) throws Exception {
+	public void write(List<? extends T> items) throws IOException {
 
-		sfFactory.setDestination(hdfsDestination);
-		sfFactory.setResource(hdfsResource);
+		// Write/Append all items to opened HDFS resource
 
-		SerializationFormat<Iterable<? extends T>> sFormat = sfFactory.getObject();
-		try {
-			sFormat.serialize(items);
-		} finally {
-			IOUtils.closeStream(sFormat);
-		}
+		serializationFormat.serialize(items);
 	}
 
 	/**
@@ -75,6 +77,7 @@ public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 	/**
 	 * @param resource The {@link HdfsResource} instance to write to.
 	 */
+	@Override
 	public void setResource(Resource resource) {
 		Assert.isInstanceOf(HdfsResource.class, resource, "A non-null Hdfs Resource is required to write to HDFS.");
 
@@ -84,6 +87,28 @@ public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 	@Override
 	public void afterPropertiesSet() throws Exception {
 		Assert.notNull(sfFactory, "A non-null SerializationFormatFactoryBean is required.");
+	}
+
+	@Override
+	public void open(ExecutionContext executionContext) {
+
+		sfFactory.setDestination(hdfsDestination);
+		sfFactory.setResource(hdfsResource);
+
+		try {
+			serializationFormat = sfFactory.getObject();
+		} catch (Exception e) {
+			throw new ItemStreamException(e);
+		}
+	}
+
+	@Override
+	public void close() throws ItemStreamException {
+
+		// Close HDFS stream
+
+		IOUtils.closeStream(serializationFormat);
+		serializationFormat = null;
 	}
 
 }

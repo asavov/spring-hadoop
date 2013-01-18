@@ -11,8 +11,7 @@
 	</hdp:script>
 
 	<!-- The class under testing. -->
-	<bean id="hdfsWriter" class="org.springframework.data.hadoop.serialization.HdfsWriter"
-		scope="prototype">
+	<bean id="sfFactory" class="org.springframework.data.hadoop.serialization.SerializationFormatFactoryBean">
 		<constructor-arg ref="hadoopResourceLoader" />
 	</bean>
 
