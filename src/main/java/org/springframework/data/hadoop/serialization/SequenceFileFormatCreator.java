@@ -31,9 +31,9 @@ import org.apache.hadoop.io.serializer.WritableSerialization;
  * 
  * @author Alex Savov
  */
-public class SequenceFileFormat<T> extends AbstractSequenceFileFormat<T> {
+public class SequenceFileFormatCreator<T> extends AbstractSequenceFileFormatCreator<T> {
 
-	public SequenceFileFormat(Class<T> objectsClass) {
+	public SequenceFileFormatCreator(Class<T> objectsClass) {
 		super(objectsClass);
 	}
 

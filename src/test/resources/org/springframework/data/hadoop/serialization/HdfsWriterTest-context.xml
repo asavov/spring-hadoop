@@ -11,7 +11,7 @@
 	</hdp:script>
 
 	<!-- The class under testing. -->
-	<bean id="sfFactory" class="org.springframework.data.hadoop.serialization.SerializationFormatFactoryBean">
+	<bean id="sfFactoryBean" class="org.springframework.data.hadoop.serialization.SerializationFormatFactoryBean">
 		<constructor-arg ref="hadoopResourceLoader" />
 	</bean>
 

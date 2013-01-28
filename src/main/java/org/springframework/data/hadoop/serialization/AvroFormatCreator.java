@@ -18,6 +18,7 @@ package org.springframework.data.hadoop.serialization;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.OutputStream;
 
 import org.apache.avro.Schema;
 import org.apache.avro.file.DataFileWriter;
@@ -29,33 +30,43 @@ import org.apache.avro.reflect.ReflectDatumWriter;
  * 
  * @author Alex Savov
  */
-public class AvroFormat<T> extends AbstractObjectsSerializationFormat<T> {
+public class AvroFormatCreator<T> extends SerializationFormatCreatorSupport<T> {
 
-	/* Native Avro writer. */
-	private DataFileWriter<T> writer;
+	/* The class of the objects that are serialized by this format. */
+	protected final Class<T> objectsClass;
 
-	public AvroFormat(Class<T> objectsClass) {
-		super(objectsClass);
+	/**
+	 * @param objectsClass The class of the objects that are serialized by this format.
+	 */
+	public AvroFormatCreator(Class<T> objectsClass) {
+		this.objectsClass = objectsClass;
 	}
 
-	@Override
-	protected Closeable doOpen() throws IOException {
-		Schema schema = ReflectData.get().getSchema(objectsClass);
+	public SerializationFormat<T> createSerializationFormat(final OutputStream output) {
 
-		writer = new DataFileWriter<T>(new ReflectDatumWriter<T>(schema));
+		return new SerializationFormatSupport() {
 
-		writer.setCodec(CompressionUtils.getAvroCompression(getCompressionAlias()));
+			/* Native Avro writer. */
+			DataFileWriter<T> writer;
 
-		writer.create(schema, getOutputStream());
+			@Override
+			protected Closeable doOpen() throws IOException {
+				Schema schema = ReflectData.get().getSchema(objectsClass);
 
-		return writer;
-	}
+				writer = new DataFileWriter<T>(new ReflectDatumWriter<T>(schema));
 
-	@Override
-	protected void doSerialize(Iterable<? extends T> objects) throws IOException {
-		for (T object : objects) {
-			writer.append(object);
-		}
+				writer.setCodec(CompressionUtils.getAvroCompression(getCompressionAlias()));
+
+				writer.create(schema, output);
+
+				return writer;
+			}
+
+			@Override
+			protected void doSerialize(T object) throws IOException {
+				writer.append(object);
+			}
+		};
 	}
 
 	/**

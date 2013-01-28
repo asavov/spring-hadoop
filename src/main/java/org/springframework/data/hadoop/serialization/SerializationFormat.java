@@ -18,31 +18,17 @@ package org.springframework.data.hadoop.serialization;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.io.OutputStream;
 
 /**
  * The interface represents a strategy to serialize objects to HDFS.
  * 
  * @see {@link ResourceSerializationFormat}
- * @see {@link SequenceFileFormat}
- * @see {@link AvroSequenceFileFormat}
- * @see {@link AvroFormat}
+ * @see {@link SequenceFileFormatCreator}
+ * @see {@link AvroSequenceFileFormatCreator}
+ * @see {@link AvroFormatCreator}
  */
 public interface SerializationFormat<T> extends Closeable {
 
-	// TODO: DON'T like it!
-	// @Costin: is it OK to have such a method here?
-	// - if OK: maybe open() is more appropriate name
-	// - if not OK: how to pass the output? should it be part of the interface?
-	void setOutputStream(OutputStream outputStream) throws IOException;
-
 	void serialize(T object) throws IOException;
-
-	/**
-	 * Gets the filename extension for this kind of serialization format (such as '.avro', '.seqfile' or '.snappy').
-	 * 
-	 * @return The file extension including the '.' char or an empty/null string if not available.
-	 */
-	String getExtension();
 
 }

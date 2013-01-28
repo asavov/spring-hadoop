@@ -28,9 +28,9 @@ import org.apache.hadoop.io.SequenceFile;
  * 
  * @author Alex Savov
  */
-public class AvroSequenceFileFormat<T> extends AbstractSequenceFileFormat<T> {
+public class AvroSequenceFileFormatCreator<T> extends AbstractSequenceFileFormatCreator<T> {
 
-	public AvroSequenceFileFormat(Class<T> objectsClass) {
+	public AvroSequenceFileFormatCreator(Class<T> objectsClass) {
 		super(objectsClass);
 	}
 

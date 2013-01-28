@@ -18,10 +18,10 @@ package org.springframework.data.hadoop.serialization;
 
 import java.io.OutputStream;
 
-// TODO: Maybe I should go with this factory...
-public interface SerializationFormatFactory<T> {
+public interface SerializationFormatCreator<T> {
 
-	SerializationFormat<T> newInstance(OutputStream output);
+	// @Costin: Should passed OutputStream be part of the API or should it be impl specific?
+	SerializationFormat<T> createSerializationFormat(OutputStream output);
 
 	/**
 	 * Gets the filename extension for this kind of serialization format (such as '.avro', '.seqfile' or '.snappy').
