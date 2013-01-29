@@ -25,9 +25,9 @@ import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.io.serializer.WritableSerialization;
 
 /**
- * Serialization format for writing Java classes that are accepted by a {@link Serialization} registered with the
- * {@link SerializationFactory} using Hadoop {@link SequenceFile} serialization framework. By default Hadoop comes with
- * serialization support for {@link Serializable} and {@link Writable} classes.
+ * Creator of serialization formats writing Java classes that are accepted by a {@link Serialization} registered with
+ * the {@link SerializationFactory} using Hadoop {@link SequenceFile} serialization framework. By default Hadoop comes
+ * with serialization support for {@link Serializable} and {@link Writable} classes.
  * 
  * @author Alex Savov
  */
@@ -46,7 +46,7 @@ public class SequenceFileFormatCreator<T> extends AbstractSequenceFileFormatCrea
 
 		super.afterPropertiesSet();
 
-		registerSeqFileSerialization(getConfiguration(), WritableSerialization.class, JavaSerialization.class);
+		registerSeqFileSerialization(WritableSerialization.class, JavaSerialization.class);
 	}
 
 	protected Class<?> getKeyClass(Class<?> objectClass) {

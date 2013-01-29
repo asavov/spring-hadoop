@@ -22,9 +22,9 @@ import org.apache.hadoop.io.NullWritable;
  * 
  * @author Alex Savov
  */
-public class NullSerializationKeyProvider implements SerializationKeyProvider {
+public class NullWritableSerializationKeyProvider implements SerializationKeyProvider {
 
-	public static final NullSerializationKeyProvider INSTANCE = new NullSerializationKeyProvider();
+	public static final NullWritableSerializationKeyProvider INSTANCE = new NullWritableSerializationKeyProvider();
 
 	/**
 	 * @return The singleton <code>NullWritable</code> as returned by {@link NullWritable#get()} method.

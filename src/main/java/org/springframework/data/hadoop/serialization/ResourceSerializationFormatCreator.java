@@ -33,6 +33,8 @@ import org.springframework.data.hadoop.HadoopException;
 import org.springframework.util.Assert;
 
 /**
+ * An implementation of {@link SerializationFormatCreator} which serializes Spring {@link Resource}s to HDFS.
+ * 
  * @author Alex Savov
  */
 public class ResourceSerializationFormatCreator extends SerializationFormatCreatorSupport<Resource> implements
@@ -42,7 +44,7 @@ public class ResourceSerializationFormatCreator extends SerializationFormatCreat
 	private Configuration configuration;
 
 	/**
-	 * Sets the Hadoop configuration for this <code>SerializationFormat</code>.
+	 * Sets the Hadoop configuration for this <code>SerializationFormatCreator</code>.
 	 * 
 	 * @param configuration The configuration to use.
 	 */
@@ -61,13 +63,14 @@ public class ResourceSerializationFormatCreator extends SerializationFormatCreat
 
 	@Override
 	public SerializationFormat<Resource> createSerializationFormat(final OutputStream output) {
-
+		// Extend and customize SerializationFormat template
 		return new SerializationFormatSupport() {
 
 			private OutputStream compressedOutput;
 
 			@Override
 			protected Closeable doOpen() throws IOException {
+				// Apply compression if specified
 				return compressedOutput = compressStream(output);
 			}
 
@@ -91,6 +94,10 @@ public class ResourceSerializationFormatCreator extends SerializationFormatCreat
 		};
 	}
 
+	/**
+	 * @return compression default {@link CompressionCodec#getDefaultExtension() extension} if compression alias is
+	 * specified. <code>empty</code> string otherwise.
+	 */
 	@Override
 	public String getExtension() {
 		CompressionCodec codec = CompressionUtils.getHadoopCompression(getConfiguration(), getCompressionAlias());
@@ -98,12 +105,19 @@ public class ResourceSerializationFormatCreator extends SerializationFormatCreat
 		return codec != null ? codec.getDefaultExtension() : "";
 	}
 
+	/**
+	 * @param outputStream The original output stream.
+	 * @return original output stream if compression alias is not set or if original stream is an instance of
+	 * <code>CompressionOutputStream</code>. Otherwise return <code>CompressionOutputStream</code> wrapping original
+	 * output stream.
+	 */
 	private OutputStream compressStream(OutputStream outputStream) {
 
 		CompressionCodec codec = CompressionUtils.getHadoopCompression(getConfiguration(), getCompressionAlias());
 
-		// If a codec is specified and if passed stream does not have compression capabilities...
+		// If a codec not is specified and if passed stream does have compression capabilities...
 		if (codec == null || CompressionOutputStream.class.isInstance(outputStream)) {
+			// just return original stream untouched
 			return outputStream;
 		}
 

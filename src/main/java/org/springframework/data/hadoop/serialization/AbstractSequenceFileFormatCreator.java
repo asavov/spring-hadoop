@@ -33,11 +33,13 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.util.Assert;
 
 /**
- * The class provides support needed by {@link SerializationFormat} implementations that serialize objects based on
- * their type using {@link SequenceFile} pluggable serialization framework.
+ * The class provides support needed by {@link SerializationFormatCreator}s creating {@link SerializationFormat}s that
+ * serialize objects based on their type using Hadoop {@link SequenceFile} pluggable serialization framework.
  * 
  * @see {@link Serialization}
  * @see {@link SerializationFactory}
+ * @see {@link SequenceFileFormatCreator}
+ * @see {@link AvroSequenceFileFormatCreator}
  * 
  * @author Alex Savov
  */
@@ -56,12 +58,12 @@ public abstract class AbstractSequenceFileFormatCreator<T> extends Serialization
 	private SerializationKeyProvider serializationKeyProvider;
 
 	/**
-	 * @param objectsClass The class of the objects that are serialized by this format.
+	 * @param objectsClass The class of the objects that are serialized by this serialization format.
 	 */
 	public AbstractSequenceFileFormatCreator(Class<T> objectsClass) {
 		this.objectsClass = objectsClass;
 
-		serializationKeyProvider = NullSerializationKeyProvider.INSTANCE;
+		serializationKeyProvider = NullWritableSerializationKeyProvider.INSTANCE;
 	}
 
 	/**
@@ -78,10 +80,10 @@ public abstract class AbstractSequenceFileFormatCreator<T> extends Serialization
 	}
 
 	/**
-	 * @param serializationKey
+	 * @param serializationKeyProvider
 	 */
-	public void setSerializationKeyProvider(SerializationKeyProvider serializationKey) {
-		this.serializationKeyProvider = serializationKey;
+	public void setSerializationKeyProvider(SerializationKeyProvider serializationKeyProvider) {
+		this.serializationKeyProvider = serializationKeyProvider;
 	}
 
 	protected SerializationKeyProvider getSerializationKeyProvider() {
@@ -109,12 +111,13 @@ public abstract class AbstractSequenceFileFormatCreator<T> extends Serialization
 				Assert.isInstanceOf(FSDataOutputStream.class, output,
 						"A FSDataOutputStream is required to write to a SeqFile.");
 
+				// Resolve Hadoop compression based on compression alias
 				CompressionCodec codec = CompressionUtils.getHadoopCompression(getConfiguration(),
 						getCompressionAlias());
 
 				CompressionType compressionType = codec == null ? CompressionType.NONE : CompressionType.BLOCK;
 
-				// Delegate to Hadoop built-in SeqFile support
+				// Delegate to Hadoop built-in SeqFile support.
 				writer = SequenceFile.createWriter(getConfiguration(), FSDataOutputStream.class.cast(output),
 						getKeyClass(objectsClass), getValueClass(objectsClass), compressionType, codec);
 
@@ -161,11 +164,12 @@ public abstract class AbstractSequenceFileFormatCreator<T> extends Serialization
 	 * Adds the {@link Serialization} scheme to the configuration, so {@link SerializationFactory} instances are aware
 	 * of it.
 	 * 
-	 * @param serializationClass The Serialization class to register to underlying configuration.
+	 * @param serializationClass The Serialization classes to register to underlying configuration.
 	 */
 	@SuppressWarnings("rawtypes")
-	protected static void registerSeqFileSerialization(Configuration conf,
-			Class<? extends Serialization>... serializationClasses) {
+	protected void registerSeqFileSerialization(Class<? extends Serialization>... serializationClasses) {
+
+		Configuration conf = getConfiguration();
 
 		Collection<String> serializations = conf.getStringCollection(HADOOP_IO_SERIALIZATIONS);
 

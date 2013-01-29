@@ -23,8 +23,8 @@ import org.apache.avro.reflect.ReflectData;
 import org.apache.hadoop.io.SequenceFile;
 
 /**
- * Serialization format for writing POJOs in <code>Avro</code> schema using Hadoop {@link SequenceFile} serialization
- * framework.
+ * Creator of serialization formats writing POJOs in <code>Avro</code> schema using Hadoop {@link SequenceFile}
+ * serialization framework.
  * 
  * @author Alex Savov
  */
@@ -50,7 +50,7 @@ public class AvroSequenceFileFormatCreator<T> extends AbstractSequenceFileFormat
 
 		AvroSerialization.setValueWriterSchema(getConfiguration(), valueSchema);
 
-		registerSeqFileSerialization(getConfiguration(), AvroSerialization.class);
+		registerSeqFileSerialization(AvroSerialization.class);
 	}
 
 	/**

@@ -28,8 +28,15 @@ import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 /**
- * Utility class providing 'write to HDFS' functionality. It leverages {@link SerializationFormat serialization formats}
- * to do the actual objects serialization and thus serves as a bridge to Hadoop HDFS.
+ * A factory class (conforming to Spring {@link ObjectFactory} API) responsible to create {@link SerializationFormat}
+ * instances.
+ * 
+ * <p>
+ * The class accepts HDFS path (as String) or HDFS {@link HdfsResource resource} as destination for the write in
+ * contrast to {@link SerializationFormatCreator} which accepts the low-level <code>OutputStream</code>. Internally it
+ * appends serialization format {@link SerializationFormatCreator#getExtension() extension} to passed destination (if
+ * needed), opens an output stream to it and delegates serialization format creation to
+ * {@link SerializationFormatCreator#createSerializationFormat(OutputStream) SerializationFormatCreator}.
  * 
  * @author Alex Savov
  */
@@ -38,13 +45,16 @@ public class SerializationFormatObjectFactory implements ObjectFactory<Serializa
 	/* Used to open HDFS resource for writing. */
 	protected final HdfsResourceLoader hdfsResourceLoader;
 
-	private SerializationFormatCreator<?> serializationCreator;
+	//
+	// The properties are publicly configurable. See setters for details. {{
+	//
+	protected SerializationFormatCreator<?> serializationCreator;
 
-	/* The property is publicly configurable. */
-	private String destinationPath;
+	protected String hdfsDestinationPath;
 
-	/* The property is publicly configurable. */
-	private HdfsResource destinationResource;
+	protected HdfsResource hdfsDestinationResource;
+
+	// }}
 
 	/**
 	 * Constructs a new <code>SerializationFormatObjectFactory</code> instance.
@@ -59,26 +69,40 @@ public class SerializationFormatObjectFactory implements ObjectFactory<Serializa
 	}
 
 	/**
-	 * @param destinationPath the destinationPath to set
+	 * The serialization format returned by {@link #getObject()} writes to this HDFS destination file path.
+	 * 
+	 * @param destinationPath The HDFS destination file path to write to.
 	 */
 	public void setDestination(String destinationPath) {
-		this.destinationPath = destinationPath;
+		this.hdfsDestinationPath = destinationPath;
 	}
 
 	/**
-	 * @param destinationResource the destinationResource to set
+	 * The serialization format returned by {@link #getObject()} writes to this HDFS destination resource.
+	 * 
+	 * @param destinationResource The HDFS destination resource to write to.
 	 */
 	public void setResource(HdfsResource destinationResource) {
-		this.destinationResource = destinationResource;
+		this.hdfsDestinationResource = destinationResource;
 	}
 
 	/**
-	 * @param serializationFormatFactory the serializationFormatFactory to set
+	 * The creation of the serialization format returned by {@link #getObject()} is delegated to this instance.
+	 * 
+	 * @param serializationCreator The <code>SerializationFormatCreator</code> used by this class to create
+	 * serialization format instances.
 	 */
 	public void setSerializationFormatCreator(SerializationFormatCreator<?> serializationCreator) {
 		this.serializationCreator = serializationCreator;
 	}
 
+	/**
+	 * Appends serialization format {@link SerializationFormatCreator#getExtension() extension} to passed destination
+	 * (if needed), opens an output stream to it and delegates serialization format creation to
+	 * {@link SerializationFormatCreator#createSerializationFormat(OutputStream) SerializationFormatCreator}
+	 * 
+	 * @return SerializationFormat instance which writes either to HDFS {@link HdfsResource resource} or HDFS path.
+	 */
 	@Override
 	public SerializationFormat<?> getObject() {
 
@@ -86,13 +110,13 @@ public class SerializationFormatObjectFactory implements ObjectFactory<Serializa
 
 		OutputStream outputStream = null;
 
-		if (destinationResource != null) {
+		if (hdfsDestinationResource != null) {
 
-			outputStream = openOutputStream(serializationCreator, destinationResource);
+			outputStream = openOutputStream(serializationCreator, hdfsDestinationResource);
 
-		} else if (hasText(destinationPath)) {
+		} else if (hasText(hdfsDestinationPath)) {
 
-			outputStream = openOutputStream(serializationCreator, destinationPath);
+			outputStream = openOutputStream(serializationCreator, hdfsDestinationPath);
 
 		} else {
 			Assert.state(false, "Set either 'destinationPath' or 'destinationResource' property.");
@@ -102,26 +126,28 @@ public class SerializationFormatObjectFactory implements ObjectFactory<Serializa
 	}
 
 	/**
+	 * @param serializationCreator
 	 * @param destination The HDFS destination file path to write to.
 	 * @return The output stream used to write to HDFS at provided destination.
 	 */
-	protected OutputStream openOutputStream(SerializationFormatCreator<?> serializationFactory, String destination) {
+	protected OutputStream openOutputStream(SerializationFormatCreator<?> serializationCreator, String destination) {
 
-		destination = canonicalSerializationDestination(serializationFactory, destination);
+		destination = canonicalSerializationDestination(serializationCreator, destination);
 
 		HdfsResource hdfsResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
 
-		return openOutputStream(serializationFactory, hdfsResource);
+		return openOutputStream(serializationCreator, hdfsResource);
 	}
 
 	/**
+	 * @param serializationCreator
 	 * @param destinationResource The HDFS destination resource to write to.
 	 * @return The output stream used to write to HDFS at provided destination.
 	 */
-	protected OutputStream openOutputStream(SerializationFormatCreator<?> serializationFactory,
+	protected OutputStream openOutputStream(SerializationFormatCreator<?> serializationCreator,
 			HdfsResource destinationResource) {
 
-		destinationResource = canonicalSerializationDestination(serializationFactory, destinationResource);
+		destinationResource = canonicalSerializationDestination(serializationCreator, destinationResource);
 
 		try {
 			// Open destination resource for writing.
@@ -131,14 +157,21 @@ public class SerializationFormatObjectFactory implements ObjectFactory<Serializa
 		}
 	}
 
-	protected HdfsResource canonicalSerializationDestination(SerializationFormatCreator<?> serializationFactory,
+	/**
+	 * @param serializationCreator
+	 * @param destinationResource The HDFS destination resource to write to.
+	 * @return passed <code>destinationResource</code> if its filename ends with serialization format extension.
+	 * Otherwise return a new <code>HdfsResource</code> with a filename which is a concatenation of
+	 * <code>destinationResource</code> filename and the serialization format extension.
+	 */
+	protected HdfsResource canonicalSerializationDestination(SerializationFormatCreator<?> serializationCreator,
 			HdfsResource destinationResource) {
 
 		String destination = destinationResource.getFilename();
 
-		if (!isCanonicalSerializationDestination(serializationFactory, destination)) {
+		if (!isCanonicalSerializationDestination(serializationCreator, destination)) {
 
-			destination = canonicalSerializationDestination(serializationFactory, destination);
+			destination = canonicalSerializationDestination(serializationCreator, destination);
 
 			destinationResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
 		}
@@ -146,21 +179,33 @@ public class SerializationFormatObjectFactory implements ObjectFactory<Serializa
 		return destinationResource;
 	}
 
-	protected String canonicalSerializationDestination(SerializationFormatCreator<?> serializationFactory,
+	/**
+	 * @param serializationCreator
+	 * @param destination The HDFS destination file path to write to.
+	 * @return passed <code>destination</code> if it ends with serialization format extension. Otherwise return a new
+	 * destination which is a concatenation of <code>destination</code> and the serialization format extension.
+	 */
+	protected String canonicalSerializationDestination(SerializationFormatCreator<?> serializationCreator,
 			String destination) {
 
-		if (!isCanonicalSerializationDestination(serializationFactory, destination)) {
+		if (!isCanonicalSerializationDestination(serializationCreator, destination)) {
 
-			destination += serializationFactory.getExtension();
+			destination += serializationCreator.getExtension();
 		}
 
 		return destination;
 	}
 
-	protected boolean isCanonicalSerializationDestination(SerializationFormatCreator<?> serializationFactory,
+	/**
+	 * @param serializationCreator
+	 * @param destination HDFS destination file path.
+	 * @return <code>true</code> if <code>destination</code> ends with serialization format extension;
+	 * <code>false</code> otherwise.
+	 */
+	protected boolean isCanonicalSerializationDestination(SerializationFormatCreator<?> serializationCreator,
 			String destination) {
 
-		String extension = serializationFactory.getExtension();
+		String extension = serializationCreator.getExtension();
 
 		return !StringUtils.hasText(extension) || destination.toLowerCase().endsWith(extension.toLowerCase());
 	}

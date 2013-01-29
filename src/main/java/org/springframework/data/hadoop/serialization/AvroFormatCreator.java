@@ -26,7 +26,7 @@ import org.apache.avro.reflect.ReflectData;
 import org.apache.avro.reflect.ReflectDatumWriter;
 
 /**
- * Serialization format for writing POJOs using <code>Avro</code> serialization.
+ * Creator of serialization formats writing POJOs using <code>Avro</code> serialization.
  * 
  * @author Alex Savov
  */
@@ -51,17 +51,27 @@ public class AvroFormatCreator<T> extends SerializationFormatCreatorSupport<T> {
 
 			@Override
 			protected Closeable doOpen() throws IOException {
+				// Create reflective Avro schema by object class.
 				Schema schema = ReflectData.get().getSchema(objectsClass);
 
+				// Create Avro writer.
 				writer = new DataFileWriter<T>(new ReflectDatumWriter<T>(schema));
 
+				// Configure compression if specified.
 				writer.setCodec(CompressionUtils.getAvroCompression(getCompressionAlias()));
 
+				// Open a new file for data serialization using specified schema.
 				writer.create(schema, output);
 
+				// Return Avro writer for later release.
 				return writer;
 			}
 
+			/**
+			 * Writes objects using Avro serialization.
+			 * 
+			 * @see {@link DataFileWriter}
+			 */
 			@Override
 			protected void doSerialize(T object) throws IOException {
 				writer.append(object);

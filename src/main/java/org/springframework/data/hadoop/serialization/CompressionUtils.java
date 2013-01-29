@@ -49,8 +49,8 @@ public abstract class CompressionUtils {
 	 * @return The codec to be used to compress the data on the fly while storing it onto HDFS, if the
 	 * <code>compressionAlias</code> property is specified; <code>null</code> otherwise.
 	 * 
-	 * @throws IllegalArgumentException if the codec class name is not resolvable
-	 * @throws RuntimeException if the codec class is not instantiable
+	 * @throws IllegalArgumentException if the codec class name could not be resolved
+	 * @throws RuntimeException if the codec class could not be instantiated
 	 */
 	public static CompressionCodec getHadoopCompression(Configuration conf, String compressionAlias) {
 
@@ -66,7 +66,7 @@ public abstract class CompressionUtils {
 		// If the codec is not configured within Hadoop try to load it from the classpath
 		if (compression == null) {
 			Class<?> compressionClass = ClassUtils.resolveClassName(compressionAlias,
-					SerializationFormatFactoryBean.class.getClassLoader());
+					SerializationFormat.class.getClassLoader());
 
 			// Instantiate codec and initialize it from configuration
 			// org.apache.hadoop.util.ReflectionUtils design is specific to Hadoop env :)

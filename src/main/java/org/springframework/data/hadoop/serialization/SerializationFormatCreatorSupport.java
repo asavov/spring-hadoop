@@ -21,8 +21,7 @@ import java.io.IOException;
 import org.apache.hadoop.io.IOUtils;
 
 /**
- * The class provides support needed by {@link SerializationFormat} implementations that support compression. This
- * feature is useful for writing large objects.
+ * The class provides common support needed by {@link SerializationFormatCreator} implementations.
  * 
  * @author Alex Savov
  */
@@ -32,10 +31,10 @@ public abstract class SerializationFormatCreatorSupport<T> implements Serializat
 	private String compressionAlias;
 
 	/**
-	 * Sets the compression alias for this <code>SerializationFormat</code>. It's up to the implementation to resolve
-	 * the alias to the actual compression algorithm.
+	 * Sets the compression alias for the <code>SerializationFormat</code>s created by this class. It's up to the
+	 * implementation to resolve the alias to the actual compression algorithm.
 	 * 
-	 * @param codecAlias The compression alias to use.
+	 * @param compressionAlias The compression alias to use.
 	 */
 	public void setCompressionAlias(String compressionAlias) {
 		this.compressionAlias = compressionAlias;
@@ -45,20 +44,31 @@ public abstract class SerializationFormatCreatorSupport<T> implements Serializat
 		return compressionAlias;
 	}
 
+	/**
+	 * A template class to be extended by SerializationFormatCreatorSupport descendants and returned by their
+	 * createSerializationFormat method.
+	 */
 	protected abstract class SerializationFormatSupport implements SerializationFormat<T> {
 
+		/* Indicates whether this serialization format has been used for writing. */
 		protected boolean isOpen = false;
 
+		/* The native resource used by this serialization format that should be released upon close(). */
 		protected Closeable nativeResource;
 
 		@Override
 		public void serialize(T source) throws IOException {
 
+			// Lazy open serialization format upon first write
 			open();
 
+			// Delegate to core serialization
 			doSerialize(source);
 		}
 
+		/**
+		 * Close the native resource returned by {@link #doOpen()}.
+		 */
 		@Override
 		public void close() throws IOException {
 			IOUtils.closeStream(nativeResource);
@@ -66,6 +76,10 @@ public abstract class SerializationFormatCreatorSupport<T> implements Serializat
 			isOpen = false;
 		}
 
+		/**
+		 * Lazy open serialization format for writing.
+		 * @throws IOException
+		 */
 		protected void open() throws IOException {
 			if (!isOpen) {
 				nativeResource = doOpen();
@@ -74,8 +88,18 @@ public abstract class SerializationFormatCreatorSupport<T> implements Serializat
 			}
 		}
 
+		/**
+		 * A hook method to be implemented by descendats to execute custom open logic.
+		 * @return The underlying native resource (as Closeable) to be released by {@link #close()}.
+		 * @throws IOException
+		 */
 		protected abstract Closeable doOpen() throws IOException;
 
+		/**
+		 * Here goes core serialization logic.
+		 * @param source The object to write.
+		 * @throws IOException
+		 */
 		protected abstract void doSerialize(T source) throws IOException;
 
 	}

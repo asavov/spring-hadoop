@@ -19,8 +19,8 @@ import org.springframework.beans.factory.FactoryBean;
 import org.springframework.data.hadoop.fs.HdfsResourceLoader;
 
 /**
- * Utility class providing 'write to HDFS' functionality. It leverages {@link SerializationFormat serialization formats}
- * to do the actual objects serialization and thus serves as a bridge to Hadoop HDFS.
+ * A factory class (conforming to Spring {@link FactoryBean} API) responsible to create {@link SerializationFormat}
+ * instances.
  * 
  * @author Alex Savov
  */
@@ -36,11 +36,17 @@ public class SerializationFormatFactoryBean extends SerializationFormatObjectFac
 		super(hdfsResourceLoader);
 	}
 
+	/**
+	 * @return <code>SerializationFormat.class</code>
+	 */
 	@Override
 	public Class<?> getObjectType() {
 		return SerializationFormat.class;
 	}
 
+	/**
+	 * @return <code>false</code> since a new instance is returned by {@link #getObject()} method on every call.
+	 */
 	@Override
 	public boolean isSingleton() {
 		return false;

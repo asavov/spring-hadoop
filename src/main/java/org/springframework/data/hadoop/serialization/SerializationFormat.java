@@ -20,15 +20,22 @@ import java.io.Closeable;
 import java.io.IOException;
 
 /**
- * The interface represents a strategy to serialize objects to HDFS.
+ * A strategy interface encapsulating the logic to serialize objects to HDFS.
  * 
- * @see {@link ResourceSerializationFormat}
- * @see {@link SequenceFileFormatCreator}
- * @see {@link AvroSequenceFileFormatCreator}
- * @see {@link AvroFormatCreator}
+ * <p>
+ * Instances of this interface are created by {@link SerializationFormatCreator}.
+ * 
+ * @author Alex Savov
  */
 public interface SerializationFormat<T> extends Closeable {
 
+	/**
+	 * Writes an object in this serialization format.
+	 * 
+	 * @param object The object to write.
+	 * 
+	 * @throws IOException in case of errors writing to the stream
+	 */
 	void serialize(T object) throws IOException;
 
 }
