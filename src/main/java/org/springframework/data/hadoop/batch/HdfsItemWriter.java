@@ -42,14 +42,14 @@ public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 
 	private SerializationFormatObjectFactory sfObjectFactory;
 
-	private String hdfsDestination;
+	private String hdfsLocation;
 
 	private HdfsResource hdfsResource;
 
 	@Override
 	public void write(List<? extends T> items) throws Exception {
 
-		sfObjectFactory.setDestination(hdfsDestination);
+		sfObjectFactory.setDestination(hdfsLocation);
 		sfObjectFactory.setResource(hdfsResource);
 
 		SerializationFormat<T> sFormat = (SerializationFormat<T>) sfObjectFactory.getObject();
@@ -71,10 +71,10 @@ public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 	}
 
 	/**
-	 * @param destination The HDFS destination file path to write to.
+	 * @param location The HDFS destination file path to write to.
 	 */
-	public void setDestination(String destination) {
-		hdfsDestination = destination;
+	public void setLocation(String location) {
+		hdfsLocation = location;
 	}
 
 	/**

@@ -47,7 +47,7 @@ public class HdfsItemStreamWriter<T> extends ItemStreamSupport implements Resour
 
 	private SerializationFormatObjectFactory sfObjectFactory;
 
-	private String hdfsDestination;
+	private String hdfsLocation;
 
 	private HdfsResource hdfsResource;
 
@@ -56,7 +56,7 @@ public class HdfsItemStreamWriter<T> extends ItemStreamSupport implements Resour
 	@Override
 	public void open(ExecutionContext executionContext) {
 
-		sfObjectFactory.setDestination(hdfsDestination);
+		sfObjectFactory.setDestination(hdfsLocation);
 		sfObjectFactory.setResource(hdfsResource);
 
 		try {
@@ -95,10 +95,10 @@ public class HdfsItemStreamWriter<T> extends ItemStreamSupport implements Resour
 	}
 
 	/**
-	 * @param destination The HDFS destination file path to write to.
+	 * @param location The HDFS destination file path to write to.
 	 */
-	public void setDestination(String destination) {
-		hdfsDestination = destination;
+	public void setLocation(String location) {
+		hdfsLocation = location;
 	}
 
 	/**

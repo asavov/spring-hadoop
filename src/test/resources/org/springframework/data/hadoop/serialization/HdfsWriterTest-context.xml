@@ -10,8 +10,7 @@
 		if (fsh.test("${hdfs.writer.output.dir}")) fsh.rmr("${hdfs.writer.output.dir}")
 	</hdp:script>
 
-	<!-- The class under testing. -->
-	<bean id="sfFactoryBean" class="org.springframework.data.hadoop.serialization.SerializationFormatFactoryBean">
+	<bean id="sfObjectFactory" class="org.springframework.data.hadoop.serialization.SerializationFormatObjectFactory">
 		<constructor-arg ref="hadoopResourceLoader" />
 	</bean>
 

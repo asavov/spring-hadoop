@@ -26,7 +26,7 @@ import java.io.IOException;
  */
 public interface SerializationFormatOperations {
 
-	public interface SerializationFormatCallback<T> {
+	public static interface SerializationFormatCallback<T> {
 
 		void doInSerializationFormat(SerializationFormat<T> serializationFormat) throws IOException;
 

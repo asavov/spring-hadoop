@@ -48,6 +48,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.data.hadoop.fs.HdfsResource;
+import org.springframework.data.hadoop.fs.HdfsResourceLoader;
+import org.springframework.data.hadoop.serialization.SerializationFormatOperations.SerializationFormatCallback;
 import org.springframework.expression.AccessException;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
@@ -63,8 +65,8 @@ import org.springframework.util.ClassUtils;
 public class HdfsWriterTest {
 
 	@Autowired
-	private SerializationFormatFactoryBean sfFactoryBean;
-
+	private HdfsResourceLoader hdfsResourceLoader;
+	
 	@Autowired
 	private Configuration configuration;
 
@@ -80,7 +82,9 @@ public class HdfsWriterTest {
 	@Value("${hdfs.writer.output.dir}")
 	private String hdfsOutputDir;
 
-	private ResourceSerializationFormatCreator RESOURCE;
+	private SerializationFormatObjectFactory sfObjectFactory;
+	
+	private ResourceSerializationFormatCreator RESOURCE_FORMAT;
 
 	private AvroFormatCreator<PojoSerializable> AVRO;
 
@@ -91,11 +95,13 @@ public class HdfsWriterTest {
 	private AvroSequenceFileFormatCreator<PojoSerializable> SEQUENCE_FILE_AVRO;
 
 	@Before
-	public void initSerializationFormatFactories() throws Exception {
+	public void setUp() throws Exception {
+		
+		sfObjectFactory = new SerializationFormatObjectFactory(hdfsResourceLoader);
 
-		RESOURCE = new ResourceSerializationFormatCreator();
-		RESOURCE.setConfiguration(configuration);
-		RESOURCE.afterPropertiesSet();
+		RESOURCE_FORMAT = new ResourceSerializationFormatCreator();
+		RESOURCE_FORMAT.setConfiguration(configuration);
+		RESOURCE_FORMAT.afterPropertiesSet();
 
 		// TODO: If we decide to clone Configuration for every SerializationFormat then this code is required.
 		/*
@@ -134,11 +140,19 @@ public class HdfsWriterTest {
 	 * Test write from source file to HDFS destination.
 	 */
 	@Test
-	public void testWriteSimple() throws Exception {
+	public void testWriteOfResource() throws Exception {
 
-		testResourceWrite(/* codec */null, /* doesnt matter */false);
+		testResourceWrite(1, /* no compression */null, /* doesnt matter */false);
 	}
 
+	/*
+	 * Test write from multiple source files (in our case the same one) to HDFS destination.
+	 */
+	@Test
+	public void testWriteOfMultipleResources() throws Exception {
+		testResourceWrite(5, /* no compression */null, /* doesnt matter */false);
+	}
+	
 	/**
 	 * Test write of pojos collection using Writable serialization.
 	 */
@@ -232,7 +246,7 @@ public class HdfsWriterTest {
 		final CompressionCodec codec = new CompressionCodecFactory(configuration).getCodecByName(DefaultCodec.class
 				.getSimpleName());
 
-		testResourceWrite(codec, /* useCodecAlias */true);
+		testResourceWrite(1, codec, /* useCodecAlias */true);
 	}
 
 	/**
@@ -245,7 +259,7 @@ public class HdfsWriterTest {
 		final CompressionCodec codec = new CompressionCodecFactory(configuration).getCodecByName(GzipCodec.class
 				.getSimpleName());
 
-		testResourceWrite(codec, /* useCodecAlias */false);
+		testResourceWrite(1, codec, /* useCodecAlias */false);
 	}
 
 	/**
@@ -258,7 +272,7 @@ public class HdfsWriterTest {
 		// client on the classpath
 		final CompressionCodec codec = new CustomCompressionCodec();
 
-		testResourceWrite(codec, /* useCodecAlias */false);
+		testResourceWrite(1, codec, /* useCodecAlias */false);
 	}
 
 	/**
@@ -276,7 +290,7 @@ public class HdfsWriterTest {
 		// Get a list of all codecs supported by Hadoop
 		for (Class<? extends CompressionCodec> codecClass : CompressionCodecFactory.getCodecClasses(configuration)) {
 			try {
-				testResourceWrite(ReflectionUtils.newInstance(codecClass, configuration), /* useCodecAlias */true);
+				testResourceWrite(1, ReflectionUtils.newInstance(codecClass, configuration), /* useCodecAlias */true);
 			} catch (Exception exc) {
 				exceptions.append(codecClass.getName() + " not supported. Details: " + exc.getMessage() + "\n");
 			}
@@ -322,11 +336,11 @@ public class HdfsWriterTest {
 	 * @param useAlias If <code>true</code> uses <code>codec.getClass().getSimpleName()</code> as a codec alias.
 	 * Otherwise uses <code>codec.getClass().getName()</code> as a codec class name.
 	 */
-	private void testResourceWrite(CompressionCodec codec, boolean useAlias) throws Exception {
+	private void testResourceWrite(int resourceCopies, CompressionCodec codec, boolean useAlias) throws Exception {
 
 		if (codec != null) {
 			// configure compression
-			RESOURCE.setCompressionAlias(useAlias ? codec.getClass().getSimpleName() : codec.getClass()
+			RESOURCE_FORMAT.setCompressionAlias(useAlias ? codec.getClass().getSimpleName() : codec.getClass()
 					.getName());
 		}
 
@@ -337,14 +351,16 @@ public class HdfsWriterTest {
 
 			// add file name
 			destination += sourceResource.getFilename();
+			// add files count
+			destination += "_" + resourceCopies;			
 			// add serialization format name
-			destination += "_" + RESOURCE.getClass().getSimpleName();
+			destination += "_" + RESOURCE_FORMAT.getClass().getSimpleName();
 		}
 
-		hdfsWrite(RESOURCE, Collections.singleton(sourceResource), destination);
+		hdfsWrite(RESOURCE_FORMAT, Collections.nCopies(resourceCopies, sourceResource), destination);
 
 		// expected destination on hdfs should have codec extension appended
-		assertHdfsFileExists(destination + RESOURCE.getExtension());
+		assertHdfsFileExists(destination + RESOURCE_FORMAT.getExtension());
 	}
 
 	/**
@@ -353,12 +369,16 @@ public class HdfsWriterTest {
 	private <T> void testSerializationWrite(Class<T> objectClass, SerializationFormatCreatorSupport<?> serializationCreator,
 			boolean compress) throws Exception {
 
+		List<T> objects = createPojoList(objectClass, 5000);
+		
 		String destination;
 		{
 			destination = hdfsOutputDir;
 
 			// add class name
 			destination += objectClass.getSimpleName();
+			// add objects count
+			destination += "_" + objects.size();
 			// add serialization format name
 			destination += "_" + serializationCreator.getClass().getSimpleName();
 			// add compression flag
@@ -372,8 +392,6 @@ public class HdfsWriterTest {
 			serializationCreator.setCompressionAlias("deflate");
 		}
 
-		List<T> objects = createPojoList(objectClass, 5000);
-		
 		hdfsWrite((SerializationFormatCreator<T>) serializationCreator, objects, destination);
 
 		assertHdfsFileExists(destination);
@@ -383,38 +401,38 @@ public class HdfsWriterTest {
 		assertEquals(objects, readObjects);
 	}
 
-	@SuppressWarnings("unchecked")
-	private <T> void hdfsWrite(SerializationFormatCreator<T> serializationCreator, Iterable<T> source, String destination) throws Exception {
+	private <T> void hdfsWrite(SerializationFormatCreator<T> serializationCreator, final Iterable<T> sources, String destination) throws Exception {
 
-		// Delegate to core SerializationFormat logic.
-		sfFactoryBean.setDestination(destination);			
-		sfFactoryBean.setSerializationFormatCreator(serializationCreator);
+		// Delegate to core SerializationFormat logic.			
+		sfObjectFactory.setSerializationFormatCreator(serializationCreator);
 		
-		SerializationFormat<T> serializationFormat = null;
-		try {			
-			// it's safe to cast since passed SerializationFormatFactory<T> returns exactly SerializationFormat<T>
-			serializationFormat = (SerializationFormat<T>) sfFactoryBean.getObject();
-			
-			for (T aSource : source) {
-				serializationFormat.serialize(aSource);				
-			}
-		} finally {
-			closeQuietly(serializationFormat);
-		}
+		SerializationFormatOperations serializationOperations = new SerializationFormatTemplate(sfObjectFactory);
+		
+		serializationOperations.execute(destination, new SerializationFormatCallback<T>() {
+			@Override
+			public void doInSerializationFormat(SerializationFormat<T> serializationFormat) throws IOException {
+				for (T source : sources) {
+					serializationFormat.serialize(source);				
+				}
+			}			
+		});
 	}
 
 	@SuppressWarnings("unchecked")
 	private <T> List<T> readFromSeqFile(String destination) throws Exception {
 
-		SequenceFile.Reader reader = new SequenceFile.Reader(sfFactoryBean.hdfsResourceLoader.getFileSystem(), new Path(
+		SequenceFile.Reader reader = new SequenceFile.Reader(hdfsResourceLoader.getFileSystem(), new Path(
 				destination), configuration);
 
 		try {
 			List<T> objects = new ArrayList<T>();
+			
+			final Object KEY_TO_REUSE = null;
+			final Object VALUE_TO_REUSE = null;
 
-			while (reader.next((Object) null) != null) {
+			while (reader.next(KEY_TO_REUSE) != null) {
 
-				Object currentValue = reader.getCurrentValue(reader.getValueClass().newInstance());
+				Object currentValue = reader.getCurrentValue(VALUE_TO_REUSE);
 
 				if (currentValue instanceof AvroWrapper<?>) {
 					currentValue = ((AvroWrapper<?>) currentValue).datum();
@@ -435,7 +453,7 @@ public class HdfsWriterTest {
 		DataFileStream<T> reader = null;
 		InputStream inputStream = null;
 		try {
-			HdfsResource hdfsResource = (HdfsResource) sfFactoryBean.hdfsResourceLoader.getResource(destination);
+			HdfsResource hdfsResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
 
 			inputStream = hdfsResource.getInputStream();
 
@@ -456,7 +474,7 @@ public class HdfsWriterTest {
 	}
 
 	private void assertHdfsFileExists(String hdfsFile) {
-		assertTrue("'" + hdfsFile + "' file is not present on HDFS.", sfFactoryBean.hdfsResourceLoader.getResource(hdfsFile)
+		assertTrue("'" + hdfsFile + "' file is not present on HDFS.", hdfsResourceLoader.getResource(hdfsFile)
 				.exists());
 	}
 

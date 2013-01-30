@@ -46,7 +46,7 @@ public class HdfsMultiResourceItemWriter<T> extends ExecutionContextUserSupport 
 
 	private final static String RESOURCE_INDEX_KEY = "resource.index";
 
-	private String baseResource;
+	private String baseLocation;
 
 	private int resourceIndex = -1;
 
@@ -60,9 +60,9 @@ public class HdfsMultiResourceItemWriter<T> extends ExecutionContextUserSupport 
 
 	public void write(List<? extends T> items) throws Exception {
 
-		String destination = baseResource + suffixCreator.getSuffix(resourceIndex++);
+		String location = baseLocation + suffixCreator.getSuffix(resourceIndex++);
 
-		delegate.setDestination(destination);
+		delegate.setLocation(location);
 
 		delegate.write(items);
 	}
@@ -78,14 +78,14 @@ public class HdfsMultiResourceItemWriter<T> extends ExecutionContextUserSupport 
 	 * Prototype for HDFS destination file path. The prototype will be appended with a suffix (according to
 	 * {@link #setResourceSuffixCreator(ResourceSuffixCreator)} to build the actual paths.
 	 */
-	public void setBaseDestination(String baseDestination) {
-		this.baseResource = baseDestination;
+	public void setBaseLocation(String baseLocation) {
+		this.baseLocation = baseLocation;
 	}
 
 	/**
 	 * Customize the suffix of the HDFS destination file path to which every
 	 * {@link HdfsMultiResourceItemWriter#write(List) write} goes. The suffix returned is appended to provided
-	 * {@link #setBaseDestination(String) base destination}.
+	 * {@link #setBaseLocation(String) base destination}.
 	 */
 	public void setResourceSuffixCreator(ResourceSuffixCreator resourceSuffixCreator) {
 		this.suffixCreator = resourceSuffixCreator;

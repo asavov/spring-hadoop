@@ -45,16 +45,13 @@ public class SerializationFormatObjectFactory implements ObjectFactory<Serializa
 	/* Used to open HDFS resource for writing. */
 	protected final HdfsResourceLoader hdfsResourceLoader;
 
-	//
-	// The properties are publicly configurable. See setters for details. {{
-	//
+	// The properties are publicly configurable. See setters for details.
+
 	protected SerializationFormatCreator<?> serializationCreator;
 
 	protected String hdfsDestinationPath;
 
 	protected HdfsResource hdfsDestinationResource;
-
-	// }}
 
 	/**
 	 * Constructs a new <code>SerializationFormatObjectFactory</code> instance.

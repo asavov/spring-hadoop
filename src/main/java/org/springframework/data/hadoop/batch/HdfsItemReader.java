@@ -74,6 +74,7 @@ public class HdfsItemReader<T> extends FlatFileItemReader<T> {
 		if (resource == null) {
 			Assert.hasText(location, "either a resource or a location need to be specified");
 			resource = loader.getResource(location);
+			// @Costin: the check is obsolete cause the parent class provides even better handling of checked state.
 			Assert.isTrue(resource.exists() && resource.isReadable(), "non-existing or non-readable resource " + resource);
 		}
 
