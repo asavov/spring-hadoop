@@ -15,6 +15,8 @@
  */
 package org.springframework.data.hadoop.serialization;
 
+import static org.apache.commons.io.IOUtils.closeQuietly;
+
 import java.io.Closeable;
 import java.io.FilterOutputStream;
 import java.io.IOException;
@@ -22,7 +24,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.compress.CodecPool;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionOutputStream;
@@ -81,14 +82,15 @@ public class ResourceSerializationFormatCreator extends SerializationFormatCreat
 					inputStream = source.getInputStream();
 
 					// Write source to HDFS destination
-					IOUtils.copyBytes(inputStream, compressedOutput, getConfiguration(), /* close */false);
+					org.apache.hadoop.io.IOUtils.copyBytes(inputStream, compressedOutput, getConfiguration(), /* close */
+							false);
 
 				} catch (IOException ioExc) {
 
 					throw new HadoopException("Cannot write resource: " + ioExc.getMessage(), ioExc);
 
 				} finally {
-					IOUtils.closeStream(inputStream);
+					closeQuietly(inputStream);
 				}
 			}
 		};

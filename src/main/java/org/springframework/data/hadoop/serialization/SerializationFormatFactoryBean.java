@@ -22,6 +22,8 @@ import org.springframework.data.hadoop.fs.HdfsResourceLoader;
  * A factory class (conforming to Spring {@link FactoryBean} API) responsible to create {@link SerializationFormat}
  * instances.
  * 
+ * @see {@link SerializationFormatObjectFactory}
+ * 
  * @author Alex Savov
  */
 public class SerializationFormatFactoryBean extends SerializationFormatObjectFactory implements

@@ -15,6 +15,7 @@
  */
 package org.springframework.data.hadoop.serialization;
 
+import static org.apache.commons.io.IOUtils.closeQuietly;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -33,7 +34,6 @@ import org.apache.avro.mapred.AvroWrapper;
 import org.apache.avro.reflect.ReflectDatumReader;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.compress.CompressionCodec;
@@ -350,7 +350,7 @@ public class HdfsWriterTest {
 	/**
 	 * Test core write-of-objects logic.
 	 */
-	private <T> void testSerializationWrite(Class<T> objectClass, SerializationFormatCreatorSupport<?> serializationFactory,
+	private <T> void testSerializationWrite(Class<T> objectClass, SerializationFormatCreatorSupport<?> serializationCreator,
 			boolean compress) throws Exception {
 
 		String destination;
@@ -360,35 +360,35 @@ public class HdfsWriterTest {
 			// add class name
 			destination += objectClass.getSimpleName();
 			// add serialization format name
-			destination += "_" + serializationFactory.getClass().getSimpleName();
+			destination += "_" + serializationCreator.getClass().getSimpleName();
 			// add compression flag
 			destination += (compress ? "_compressed" : "");
 			// add serialization format extension
-			destination += serializationFactory.getExtension();
+			destination += serializationCreator.getExtension();
 		}
 
 		if (compress) {
 			// Use default Hadoop compression (via its alias) also supported by Avro!
-			serializationFactory.setCompressionAlias("deflate");
+			serializationCreator.setCompressionAlias("deflate");
 		}
 
 		List<T> objects = createPojoList(objectClass, 5000);
 		
-		hdfsWrite((SerializationFormatCreator<T>) serializationFactory, objects, destination);
+		hdfsWrite((SerializationFormatCreator<T>) serializationCreator, objects, destination);
 
 		assertHdfsFileExists(destination);
 
-		List<?> readObjects = (serializationFactory == AVRO) ? readFromAvro(destination) : readFromSeqFile(destination);
+		List<?> readObjects = (serializationCreator == AVRO) ? readFromAvro(destination) : readFromSeqFile(destination);
 
 		assertEquals(objects, readObjects);
 	}
 
 	@SuppressWarnings("unchecked")
-	private <T> void hdfsWrite(SerializationFormatCreator<T> serializationFactory, Iterable<T> source, String destination) throws Exception {
+	private <T> void hdfsWrite(SerializationFormatCreator<T> serializationCreator, Iterable<T> source, String destination) throws Exception {
 
 		// Delegate to core SerializationFormat logic.
 		sfFactoryBean.setDestination(destination);			
-		sfFactoryBean.setSerializationFormatCreator(serializationFactory);
+		sfFactoryBean.setSerializationFormatCreator(serializationCreator);
 		
 		SerializationFormat<T> serializationFormat = null;
 		try {			
@@ -399,7 +399,7 @@ public class HdfsWriterTest {
 				serializationFormat.serialize(aSource);				
 			}
 		} finally {
-			IOUtils.closeStream(serializationFormat);
+			closeQuietly(serializationFormat);
 		}
 	}
 
@@ -426,7 +426,7 @@ public class HdfsWriterTest {
 			return objects;
 
 		} finally {
-			IOUtils.closeStream(reader);
+			closeQuietly(reader);
 		}
 	}
 
@@ -450,8 +450,8 @@ public class HdfsWriterTest {
 			return objects;
 
 		} finally {
-			IOUtils.closeStream(reader);
-			IOUtils.closeStream(inputStream);
+			closeQuietly(reader);
+			closeQuietly(inputStream);
 		}
 	}
 

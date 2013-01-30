@@ -69,7 +69,8 @@ public class SerializationFormatObjectFactory implements ObjectFactory<Serializa
 	}
 
 	/**
-	 * The serialization format returned by {@link #getObject()} writes to this HDFS destination file path.
+	 * The serialization format returned by {@link #getObject()} writes to this HDFS destination file path if set.
+	 * Setting of the {@link #setResource(HdfsResource) resource} property is higher priority.
 	 * 
 	 * @param destinationPath The HDFS destination file path to write to.
 	 */
@@ -78,7 +79,7 @@ public class SerializationFormatObjectFactory implements ObjectFactory<Serializa
 	}
 
 	/**
-	 * The serialization format returned by {@link #getObject()} writes to this HDFS destination resource.
+	 * The serialization format returned by {@link #getObject()} writes to this HDFS destination resource if set.
 	 * 
 	 * @param destinationResource The HDFS destination resource to write to.
 	 */

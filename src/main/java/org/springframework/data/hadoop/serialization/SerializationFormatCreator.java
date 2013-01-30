@@ -22,7 +22,7 @@ import java.io.OutputStream;
  * The interface is responsible to create serizalization format instances. Different implementations might provide
  * different serialization mechanisms, such as Avro or SeqFile.
  * 
- * @param <T> The type of objects written by the {@link SerializationFormat} instance returned by this creator.
+ * @param <T> The type of objects serialized by the {@link SerializationFormat} instance returned by this creator.
  * 
  * @see {@link ResourceSerializationFormatCreator}
  * @see {@link SequenceFileFormatCreator}

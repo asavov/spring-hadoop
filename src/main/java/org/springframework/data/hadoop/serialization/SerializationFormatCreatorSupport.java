@@ -15,10 +15,12 @@
  */
 package org.springframework.data.hadoop.serialization;
 
+import static org.apache.commons.io.IOUtils.closeQuietly;
+
 import java.io.Closeable;
 import java.io.IOException;
 
-import org.apache.hadoop.io.IOUtils;
+import org.apache.commons.io.IOUtils;
 
 /**
  * The class provides common support needed by {@link SerializationFormatCreator} implementations.
@@ -71,7 +73,7 @@ public abstract class SerializationFormatCreatorSupport<T> implements Serializat
 		 */
 		@Override
 		public void close() throws IOException {
-			IOUtils.closeStream(nativeResource);
+			closeQuietly(nativeResource);
 			nativeResource = null;
 			isOpen = false;
 		}

@@ -16,10 +16,11 @@
 
 package org.springframework.data.hadoop.batch;
 
+import static org.apache.commons.io.IOUtils.closeQuietly;
+
 import java.io.IOException;
 import java.util.List;
 
-import org.apache.hadoop.io.IOUtils;
 import org.springframework.batch.item.ExecutionContext;
 import org.springframework.batch.item.ItemStreamException;
 import org.springframework.batch.item.ItemStreamSupport;
@@ -80,7 +81,7 @@ public class HdfsItemStreamWriter<T> extends ItemStreamSupport implements Resour
 
 		// Close serialization format
 
-		IOUtils.closeStream(serializationFormat);
+		closeQuietly(serializationFormat);
 
 		serializationFormat = null;
 	}

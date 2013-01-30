@@ -16,6 +16,8 @@
 
 package org.springframework.data.hadoop.serialization;
 
+import static org.apache.commons.io.IOUtils.closeQuietly;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -23,7 +25,6 @@ import java.util.Collection;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.compress.CompressionCodec;
@@ -126,8 +127,8 @@ public abstract class AbstractSequenceFileFormatCreator<T> extends Serialization
 				return new Closeable() {
 					@Override
 					public void close() throws IOException {
-						IOUtils.closeStream(writer);
-						IOUtils.closeStream(output);
+						closeQuietly(writer);
+						closeQuietly(output);
 					}
 				};
 			}

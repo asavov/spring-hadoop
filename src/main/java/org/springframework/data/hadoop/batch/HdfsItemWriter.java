@@ -16,9 +16,10 @@
 
 package org.springframework.data.hadoop.batch;
 
+import static org.apache.commons.io.IOUtils.closeQuietly;
+
 import java.util.List;
 
-import org.apache.hadoop.io.IOUtils;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.core.io.Resource;
@@ -57,7 +58,7 @@ public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 				sFormat.serialize(item);				
 			}
 		} finally {
-			IOUtils.closeStream(sFormat);
+			closeQuietly(sFormat);
 		}
 	}
 
