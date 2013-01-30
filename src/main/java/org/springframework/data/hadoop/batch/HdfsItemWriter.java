@@ -55,7 +55,7 @@ public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 		SerializationFormat<T> sFormat = (SerializationFormat<T>) sfObjectFactory.getObject();
 		try {
 			for (T item : items) {
-				sFormat.serialize(item);				
+				sFormat.serialize(item);
 			}
 		} finally {
 			closeQuietly(sFormat);

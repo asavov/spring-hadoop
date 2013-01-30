@@ -20,8 +20,6 @@ import static org.apache.commons.io.IOUtils.closeQuietly;
 import java.io.Closeable;
 import java.io.IOException;
 
-import org.apache.commons.io.IOUtils;
-
 /**
  * The class provides common support needed by {@link SerializationFormatCreator} implementations.
  * 

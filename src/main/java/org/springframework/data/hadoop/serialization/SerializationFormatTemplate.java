@@ -21,28 +21,26 @@ import static org.apache.commons.io.IOUtils.closeQuietly;
 import java.io.IOException;
 
 /**
- * Experimental class by analogy with other xxxTemplate classes.
- * 
- * We'll keep it just to validate if it's applicable and usable in HDFS serialization context.
+ * Experimental class by analogy with other <code>xxxTemplate</code> classes. Needs to validate if it's applicable and
+ * usable in HDFS serialization context/API.
  * 
  * @author Alex Savov
  */
 public class SerializationFormatTemplate implements SerializationFormatOperations {
 
 	protected SerializationFormatObjectFactory sfObjectFactory;
-	
+
 	public SerializationFormatTemplate(SerializationFormatObjectFactory sfObjectFactory) {
 		this.sfObjectFactory = sfObjectFactory;
 	}
-	
+
 	@Override
 	public <T> void execute(String destination, SerializationFormatCallback<T> action) throws IOException {
-		
+
 		sfObjectFactory.setDestination(destination);
-		
-		@SuppressWarnings("unchecked")
+
 		SerializationFormat<T> serialization = (SerializationFormat<T>) sfObjectFactory.getObject();
-		
+
 		try {
 			action.doInSerializationFormat(serialization);
 		} finally {
