@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 the original author or authors.
+ * Copyright 2004-2012 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,22 +16,15 @@
 
 package org.springframework.data.hadoop.serialization;
 
+import java.io.Closeable;
 import java.io.IOException;
 
 /**
- * Experimental class by analogy with other <code>xxxOperations</code> classes. Needs to validate if it's applicable and
- * usable in HDFS serialization context/API.
  * 
  * @author Alex Savov
  */
-public interface SerializationFormatOperations {
+public interface SerializationReader<T> extends Closeable {
 
-	public static interface SerializationWriterCallback<T> {
-
-		void doInSerializationFormat(SerializationWriter<T> serializationFormat) throws IOException;
-
-	}
-
-	<T> void write(String destination, SerializationWriterCallback<T> action) throws IOException;
+	T read() throws IOException;
 
 }

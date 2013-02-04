@@ -16,7 +16,7 @@
 
 package org.springframework.data.hadoop.serialization;
 
-import static org.apache.commons.io.IOUtils.closeQuietly;
+import static org.apache.hadoop.io.IOUtils.closeStream;
 
 import java.io.IOException;
 
@@ -28,23 +28,23 @@ import java.io.IOException;
  */
 public class SerializationFormatTemplate implements SerializationFormatOperations {
 
-	protected SerializationFormatObjectFactory sfObjectFactory;
+	protected SerializationWriterObjectFactory sfObjectFactory;
 
-	public SerializationFormatTemplate(SerializationFormatObjectFactory sfObjectFactory) {
+	public SerializationFormatTemplate(SerializationWriterObjectFactory sfObjectFactory) {
 		this.sfObjectFactory = sfObjectFactory;
 	}
 
 	@Override
-	public <T> void execute(String destination, SerializationFormatCallback<T> action) throws IOException {
+	public <T> void write(String destination, SerializationWriterCallback<T> action) throws IOException {
 
 		sfObjectFactory.setDestination(destination);
 
-		SerializationFormat<T> serialization = (SerializationFormat<T>) sfObjectFactory.getObject();
+		SerializationWriter<T> serialization = (SerializationWriter<T>) sfObjectFactory.getObject();
 
 		try {
 			action.doInSerializationFormat(serialization);
 		} finally {
-			closeQuietly(serialization);
+			closeStream(serialization);
 		}
 	}
 

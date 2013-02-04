@@ -15,6 +15,7 @@
  */
 package org.springframework.data.hadoop.serialization;
 
+import java.io.OutputStream;
 import java.io.Serializable;
 
 import org.apache.hadoop.io.SequenceFile;
@@ -25,15 +26,15 @@ import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.io.serializer.WritableSerialization;
 
 /**
- * Creator of serialization formats writing Java classes that are accepted by a {@link Serialization} registered with
- * the {@link SerializationFactory} using Hadoop {@link SequenceFile} serialization framework. By default Hadoop comes
- * with serialization support for {@link Serializable} and {@link Writable} classes.
+ * Serialization format writing Java classes that are accepted by a {@link Serialization} registered with the
+ * {@link SerializationFactory} using Hadoop {@link SequenceFile} serialization framework. By default Hadoop comes with
+ * serialization support for {@link Serializable} and {@link Writable} classes.
  * 
  * @author Alex Savov
  */
-public class SequenceFileFormatCreator<T> extends AbstractSequenceFileFormatCreator<T> {
+public class SequenceFileFormat<T> extends AbstractSequenceFileFormat<T> {
 
-	public SequenceFileFormatCreator(Class<T> objectsClass) {
+	public SequenceFileFormat(Class<T> objectsClass) {
 		super(objectsClass);
 	}
 
@@ -49,19 +50,50 @@ public class SequenceFileFormatCreator<T> extends AbstractSequenceFileFormatCrea
 		registerSeqFileSerialization(WritableSerialization.class, JavaSerialization.class);
 	}
 
-	protected Class<?> getKeyClass(Class<?> objectClass) {
-		return getSerializationKeyProvider().getKeyClass(objectClass);
+	/**
+	 * Sequence file serialization format writer.
+	 */
+	@Override
+	public SerializationWriter<T> getWriter(OutputStream output) {
+
+		return new AbstractSequenceFileWriter(output) {
+
+			@Override
+			protected Class<?> getKeyClass() {
+				return getSerializationKeyProvider().getKeyClass(objectsClass);
+			}
+
+			@Override
+			protected Object getKey(T object) {
+				return getSerializationKeyProvider().getKey(object);
+			}
+
+			@Override
+			protected Class<?> getValueClass() {
+				return objectsClass;
+			}
+
+			@Override
+			protected Object getValue(T object) {
+				return object;
+			}
+		};
 	}
 
-	protected Object getKey(Object object) {
-		return getSerializationKeyProvider().getKey(object);
+	/**
+	 * Sequence file serialization format reader.
+	 */
+	@Override
+	public SerializationReader<T> getReader(String location) {
+
+		return new AbstractSequenceFileReader(location) {
+
+			@SuppressWarnings("unchecked")
+			@Override
+			protected T getValue(Object object) {
+				return (T) object;
+			}
+		};
 	}
 
-	protected Class<?> getValueClass(Class<?> objectClass) {
-		return objectClass;
-	}
-
-	protected Object getValue(Object object) {
-		return object;
-	}
 }

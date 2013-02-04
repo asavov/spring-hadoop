@@ -16,7 +16,7 @@
 
 package org.springframework.data.hadoop.batch;
 
-import static org.apache.commons.io.IOUtils.closeQuietly;
+import static org.apache.hadoop.io.IOUtils.closeStream;
 
 import java.util.List;
 
@@ -24,8 +24,8 @@ import org.springframework.batch.item.ItemWriter;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.core.io.Resource;
 import org.springframework.data.hadoop.fs.HdfsResource;
-import org.springframework.data.hadoop.serialization.SerializationFormat;
-import org.springframework.data.hadoop.serialization.SerializationFormatObjectFactory;
+import org.springframework.data.hadoop.serialization.SerializationWriter;
+import org.springframework.data.hadoop.serialization.SerializationWriterObjectFactory;
 import org.springframework.util.Assert;
 
 /**
@@ -40,7 +40,7 @@ import org.springframework.util.Assert;
  */
 public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 
-	private SerializationFormatObjectFactory sfObjectFactory;
+	private SerializationWriterObjectFactory sfObjectFactory;
 
 	private String hdfsLocation;
 
@@ -52,21 +52,21 @@ public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 		sfObjectFactory.setDestination(hdfsLocation);
 		sfObjectFactory.setResource(hdfsResource);
 
-		SerializationFormat<T> sFormat = (SerializationFormat<T>) sfObjectFactory.getObject();
+		SerializationWriter<T> sFormat = (SerializationWriter<T>) sfObjectFactory.getObject();
 		try {
 			for (T item : items) {
-				sFormat.serialize(item);
+				sFormat.write(item);
 			}
 		} finally {
-			closeQuietly(sFormat);
+			closeStream(sFormat);
 		}
 	}
 
 	/**
-	 * @param hdfsWriter The {@link SerializationFormatObjectFactory} instance used to write to underlying Hadoop file
+	 * @param hdfsWriter The {@link SerializationWriterObjectFactory} instance used to write to underlying Hadoop file
 	 * system.
 	 */
-	public void setSerializationFormat(SerializationFormatObjectFactory sfObjectFactory) {
+	public void setSerializationFormat(SerializationWriterObjectFactory sfObjectFactory) {
 		this.sfObjectFactory = sfObjectFactory;
 	}
 
@@ -88,7 +88,7 @@ public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 
 	@Override
 	public void afterPropertiesSet() throws Exception {
-		Assert.notNull(sfObjectFactory, "A non-null SerializationFormatObjectFactory is required.");
+		Assert.notNull(sfObjectFactory, "A non-null SerializationWriterObjectFactory is required.");
 	}
 
 }

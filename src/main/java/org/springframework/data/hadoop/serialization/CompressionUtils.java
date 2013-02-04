@@ -66,7 +66,7 @@ public abstract class CompressionUtils {
 		// If the codec is not configured within Hadoop try to load it from the classpath
 		if (compression == null) {
 			Class<?> compressionClass = ClassUtils.resolveClassName(compressionAlias,
-					SerializationFormat.class.getClassLoader());
+					SerializationWriter.class.getClassLoader());
 
 			// Instantiate codec and initialize it from configuration
 			// org.apache.hadoop.util.ReflectionUtils design is specific to Hadoop env :)

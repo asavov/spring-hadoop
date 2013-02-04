@@ -19,22 +19,22 @@ import org.springframework.beans.factory.FactoryBean;
 import org.springframework.data.hadoop.fs.HdfsResourceLoader;
 
 /**
- * A factory class (conforming to Spring {@link FactoryBean} API) responsible to create {@link SerializationFormat}
+ * A factory class (conforming to Spring {@link FactoryBean} API) responsible to create {@link SerializationWriter}
  * instances.
  * 
- * @see {@link SerializationFormatObjectFactory}
+ * @see {@link SerializationWriterObjectFactory}
  * 
  * @author Alex Savov
  */
-public class SerializationFormatFactoryBean extends SerializationFormatObjectFactory implements
-		FactoryBean<SerializationFormat<?>> {
+public class SerializationWriterFactoryBean extends SerializationWriterObjectFactory implements
+		FactoryBean<SerializationWriter<?>> {
 
 	/**
-	 * Constructs a new <code>SerializationFormatFactoryBean</code> instance.
+	 * Constructs a new <code>SerializationWriterFactoryBean</code> instance.
 	 * 
 	 * @param hdfsResourceLoader A non-null HDFS resource loader to use.
 	 */
-	public SerializationFormatFactoryBean(HdfsResourceLoader hdfsResourceLoader) {
+	public SerializationWriterFactoryBean(HdfsResourceLoader hdfsResourceLoader) {
 		super(hdfsResourceLoader);
 	}
 
@@ -43,7 +43,7 @@ public class SerializationFormatFactoryBean extends SerializationFormatObjectFac
 	 */
 	@Override
 	public Class<?> getObjectType() {
-		return SerializationFormat.class;
+		return SerializationWriter.class;
 	}
 
 	/**

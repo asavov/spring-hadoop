@@ -15,7 +15,7 @@
  */
 package org.springframework.data.hadoop.serialization;
 
-import static org.apache.commons.io.IOUtils.closeQuietly;
+import static org.apache.hadoop.io.IOUtils.closeStream;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -23,18 +23,12 @@ import static org.junit.Assert.assertTrue;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.avro.file.DataFileStream;
-import org.apache.avro.mapred.AvroWrapper;
-import org.apache.avro.reflect.ReflectDatumReader;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
@@ -47,16 +41,15 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
-import org.springframework.data.hadoop.fs.HdfsResource;
 import org.springframework.data.hadoop.fs.HdfsResourceLoader;
-import org.springframework.data.hadoop.serialization.SerializationFormatOperations.SerializationFormatCallback;
+import org.springframework.data.hadoop.serialization.SerializationFormatOperations.SerializationWriterCallback;
 import org.springframework.expression.AccessException;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.util.ClassUtils;
 
 /**
- * Integration test for {@link SerializationFormatFactoryBean} testing simple and compressed writes of a file to HDFS.
+ * Integration test for {@link SerializationWriterFactoryBean} testing simple and compressed writes of a file to HDFS.
  * 
  * @author Alex Savov
  */
@@ -66,7 +59,7 @@ public class HdfsWriterTest {
 
 	@Autowired
 	private HdfsResourceLoader hdfsResourceLoader;
-	
+
 	@Autowired
 	private Configuration configuration;
 
@@ -82,24 +75,24 @@ public class HdfsWriterTest {
 	@Value("${hdfs.writer.output.dir}")
 	private String hdfsOutputDir;
 
-	private SerializationFormatObjectFactory sfObjectFactory;
-	
-	private ResourceSerializationFormatCreator RESOURCE_FORMAT;
+	private SerializationWriterObjectFactory sfObjectFactory;
 
-	private AvroFormatCreator<PojoSerializable> AVRO;
+	private ResourceSerializationFormat RESOURCE_FORMAT;
 
-	private SequenceFileFormatCreator<PojoSerializable> SEQUENCE_FILE_JAVA;
+	private AvroFormat<PojoSerializable> AVRO;
 
-	private SequenceFileFormatCreator<PojoWritable> SEQUENCE_FILE_WRITABLE;
+	private SequenceFileFormat<PojoSerializable> SEQUENCE_FILE_JAVA;
 
-	private AvroSequenceFileFormatCreator<PojoSerializable> SEQUENCE_FILE_AVRO;
+	private SequenceFileFormat<PojoWritable> SEQUENCE_FILE_WRITABLE;
+
+	private AvroSequenceFileFormat<PojoSerializable> SEQUENCE_FILE_AVRO;
 
 	@Before
 	public void setUp() throws Exception {
-		
-		sfObjectFactory = new SerializationFormatObjectFactory(hdfsResourceLoader);
 
-		RESOURCE_FORMAT = new ResourceSerializationFormatCreator();
+		sfObjectFactory = new SerializationWriterObjectFactory(hdfsResourceLoader);
+
+		RESOURCE_FORMAT = new ResourceSerializationFormat();
 		RESOURCE_FORMAT.setConfiguration(configuration);
 		RESOURCE_FORMAT.afterPropertiesSet();
 
@@ -121,19 +114,19 @@ public class HdfsWriterTest {
 
 		// NOTE: So far we share the same Configuration between SerializationFormats.
 
-		SEQUENCE_FILE_WRITABLE = new SequenceFileFormatCreator<PojoWritable>(PojoWritable.class);
+		SEQUENCE_FILE_WRITABLE = new SequenceFileFormat<PojoWritable>(PojoWritable.class);
 		SEQUENCE_FILE_WRITABLE.setConfiguration(configuration);
 		SEQUENCE_FILE_WRITABLE.afterPropertiesSet();
 
-		SEQUENCE_FILE_JAVA = new SequenceFileFormatCreator<PojoSerializable>(PojoSerializable.class);
+		SEQUENCE_FILE_JAVA = new SequenceFileFormat<PojoSerializable>(PojoSerializable.class);
 		SEQUENCE_FILE_JAVA.setConfiguration(configuration);
 		SEQUENCE_FILE_JAVA.afterPropertiesSet();
 
-		SEQUENCE_FILE_AVRO = new AvroSequenceFileFormatCreator<PojoSerializable>(PojoSerializable.class);
+		SEQUENCE_FILE_AVRO = new AvroSequenceFileFormat<PojoSerializable>(PojoSerializable.class);
 		SEQUENCE_FILE_AVRO.setConfiguration(configuration);
 		SEQUENCE_FILE_AVRO.afterPropertiesSet();
 
-		AVRO = new AvroFormatCreator<PojoSerializable>(PojoSerializable.class);
+		AVRO = new AvroFormat<PojoSerializable>(PojoSerializable.class);
 	}
 
 	/*
@@ -152,7 +145,7 @@ public class HdfsWriterTest {
 	public void testWriteOfMultipleResources() throws Exception {
 		testResourceWrite(5, /* no compression */null, /* doesnt matter */false);
 	}
-	
+
 	/**
 	 * Test write of pojos collection using Writable serialization.
 	 */
@@ -352,7 +345,7 @@ public class HdfsWriterTest {
 			// add file name
 			destination += sourceResource.getFilename();
 			// add files count
-			destination += "_" + resourceCopies;			
+			destination += "_" + resourceCopies;
 			// add serialization format name
 			destination += "_" + RESOURCE_FORMAT.getClass().getSimpleName();
 		}
@@ -366,11 +359,11 @@ public class HdfsWriterTest {
 	/**
 	 * Test core write-of-objects logic.
 	 */
-	private <T> void testSerializationWrite(Class<T> objectClass, SerializationFormatCreatorSupport<?> serializationCreator,
+	private <T> void testSerializationWrite(Class<T> objectClass, SerializationFormatSupport<T> serializationCreator,
 			boolean compress) throws Exception {
 
 		List<T> objects = createPojoList(objectClass, 5000);
-		
+
 		String destination;
 		{
 			destination = hdfsOutputDir;
@@ -392,90 +385,47 @@ public class HdfsWriterTest {
 			serializationCreator.setCompressionAlias("deflate");
 		}
 
-		hdfsWrite((SerializationFormatCreator<T>) serializationCreator, objects, destination);
+		hdfsWrite(serializationCreator, objects, destination);
 
 		assertHdfsFileExists(destination);
 
-		List<?> readObjects = (serializationCreator == AVRO) ? readFromAvro(destination) : readFromSeqFile(destination);
+		List<T> readObjects = new ArrayList<T>();
+		{
+			// We do need that while reading (as opposite to writing)!
+			serializationCreator.setHdfsResourceLoader(hdfsResourceLoader);
 
+			SerializationReader<T> reader = serializationCreator.getReader(destination);
+
+			for (T readObject = reader.read(); readObject != null; readObject = reader.read()) {
+				readObjects.add(readObject);
+			}
+			
+			closeStream(reader);
+		}
+		
 		assertEquals(objects, readObjects);
 	}
 
-	private <T> void hdfsWrite(SerializationFormatCreator<T> serializationCreator, final Iterable<T> sources, String destination) throws Exception {
+	private <T> void hdfsWrite(SerializationFormat<T> serializationCreator, final Iterable<T> sources,
+			String destination) throws Exception {
 
-		// Delegate to core SerializationFormat logic.			
+		// Delegate to core SerializationFormat logic.
 		sfObjectFactory.setSerializationFormatCreator(serializationCreator);
-		
+
 		SerializationFormatOperations serializationOperations = new SerializationFormatTemplate(sfObjectFactory);
-		
-		serializationOperations.execute(destination, new SerializationFormatCallback<T>() {
+
+		serializationOperations.write(destination, new SerializationWriterCallback<T>() {
 			@Override
-			public void doInSerializationFormat(SerializationFormat<T> serializationFormat) throws IOException {
+			public void doInSerializationFormat(SerializationWriter<T> serializationFormat) throws IOException {
 				for (T source : sources) {
-					serializationFormat.serialize(source);				
+					serializationFormat.write(source);
 				}
-			}			
+			}
 		});
 	}
 
-	@SuppressWarnings("unchecked")
-	private <T> List<T> readFromSeqFile(String destination) throws Exception {
-
-		SequenceFile.Reader reader = new SequenceFile.Reader(hdfsResourceLoader.getFileSystem(), new Path(
-				destination), configuration);
-
-		try {
-			List<T> objects = new ArrayList<T>();
-			
-			final Object KEY_TO_REUSE = null;
-			final Object VALUE_TO_REUSE = null;
-
-			while (reader.next(KEY_TO_REUSE) != null) {
-
-				Object currentValue = reader.getCurrentValue(VALUE_TO_REUSE);
-
-				if (currentValue instanceof AvroWrapper<?>) {
-					currentValue = ((AvroWrapper<?>) currentValue).datum();
-				}
-
-				objects.add((T) currentValue);
-			}
-
-			return objects;
-
-		} finally {
-			closeQuietly(reader);
-		}
-	}
-
-	private <T> List<T> readFromAvro(String destination) throws Exception {
-
-		DataFileStream<T> reader = null;
-		InputStream inputStream = null;
-		try {
-			HdfsResource hdfsResource = (HdfsResource) hdfsResourceLoader.getResource(destination);
-
-			inputStream = hdfsResource.getInputStream();
-
-			reader = new DataFileStream<T>(inputStream, new ReflectDatumReader<T>());
-
-			List<T> objects = new ArrayList<T>();
-
-			for (T object : reader) {
-				objects.add(object);
-			}
-
-			return objects;
-
-		} finally {
-			closeQuietly(reader);
-			closeQuietly(inputStream);
-		}
-	}
-
 	private void assertHdfsFileExists(String hdfsFile) {
-		assertTrue("'" + hdfsFile + "' file is not present on HDFS.", hdfsResourceLoader.getResource(hdfsFile)
-				.exists());
+		assertTrue("'" + hdfsFile + "' file is not present on HDFS.", hdfsResourceLoader.getResource(hdfsFile).exists());
 	}
 
 	public static class CustomCompressionCodec extends DefaultCodec {

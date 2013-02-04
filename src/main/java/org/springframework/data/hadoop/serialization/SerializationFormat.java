@@ -16,26 +16,47 @@
 
 package org.springframework.data.hadoop.serialization;
 
-import java.io.Closeable;
-import java.io.IOException;
+import java.io.OutputStream;
 
 /**
- * A strategy interface encapsulating the logic to serialize objects to HDFS.
+ * The interface is responsible to create serizalization format instances. Different implementations might provide
+ * different serialization mechanisms, such as Avro or SeqFile.
  * 
- * <p>
- * Instances of this interface are created by {@link SerializationFormatCreator}.
+ * @param <T> The type of objects serialized by the {@link SerializationWriter} instance returned by this creator.
+ * 
+ * @see {@link ResourceSerializationFormat}
+ * @see {@link SequenceFileFormat}
+ * @see {@link AvroSequenceFileFormat}
+ * @see {@link AvroFormat}
  * 
  * @author Alex Savov
  */
-public interface SerializationFormat<T> extends Closeable {
+public interface SerializationFormat<T> {
 
 	/**
-	 * Writes an object in this serialization format.
+	 * Creates a serialization format that writes to the specified <code>OutputStream</code>.
 	 * 
-	 * @param object The object to write.
+	 * <p>
+	 * Note: The output stream is closed upon {@link SerializationWriter#close() closing} the
+	 * <code>SerializationFormat</code> instance.
 	 * 
-	 * @throws IOException in case of errors writing to the stream
+	 * @param output The output stream to which created serialization format should write.
+	 * 
+	 * @return Serialization format that writes to the specified <code>OutputStream</code>.
 	 */
-	void serialize(T object) throws IOException;
+	SerializationWriter<T> getWriter(OutputStream output);
+
+	SerializationReader<T> getReader(String location);
+
+	/**
+	 * Gets the filename extension for this kind of serialization format (such as '.avro', '.seqfile' or '.snappy').
+	 * 
+	 * <p>
+	 * It is advisable but not obligatory the output stream passed to {@link #getWriter(OutputStream)} to point a file
+	 * resource with that extension.
+	 * 
+	 * @return The file extension including the '.' char or an <code>empty</code> string if not available.
+	 */
+	String getExtension();
 
 }

@@ -21,16 +21,19 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 import org.apache.avro.Schema;
+import org.apache.avro.file.DataFileStream;
 import org.apache.avro.file.DataFileWriter;
 import org.apache.avro.reflect.ReflectData;
+import org.apache.avro.reflect.ReflectDatumReader;
 import org.apache.avro.reflect.ReflectDatumWriter;
+import org.springframework.core.io.Resource;
 
 /**
- * Creator of serialization formats writing POJOs using <code>Avro</code> serialization.
+ * Serialization formats writing POJOs using <code>Avro</code> serialization.
  * 
  * @author Alex Savov
  */
-public class AvroFormatCreator<T> extends SerializationFormatCreatorSupport<T> {
+public class AvroFormat<T> extends SerializationFormatSupport<T> {
 
 	/* The class of the objects that are serialized by this format. */
 	protected final Class<T> objectsClass;
@@ -38,13 +41,16 @@ public class AvroFormatCreator<T> extends SerializationFormatCreatorSupport<T> {
 	/**
 	 * @param objectsClass The class of the objects that are serialized by this format.
 	 */
-	public AvroFormatCreator(Class<T> objectsClass) {
+	public AvroFormat(Class<T> objectsClass) {
 		this.objectsClass = objectsClass;
 	}
 
-	public SerializationFormat<T> createSerializationFormat(final OutputStream output) {
+	/**
+	 * Writes POJOs using <code>Avro</code> serialization.
+	 */
+	public SerializationWriter<T> getWriter(final OutputStream output) {
 
-		return new SerializationFormatSupport() {
+		return new SerializationWriterSupport() {
 
 			/* Native Avro writer. */
 			DataFileWriter<T> writer;
@@ -73,8 +79,35 @@ public class AvroFormatCreator<T> extends SerializationFormatCreatorSupport<T> {
 			 * @see {@link DataFileWriter}
 			 */
 			@Override
-			protected void doSerialize(T object) throws IOException {
+			protected void doWrite(T object) throws IOException {
 				writer.append(object);
+			}
+		};
+	}
+
+	/**
+	 * Reads POJOs using <code>Avro</code> serialization.
+	 */
+	@Override
+	public SerializationReader<T> getReader(final String location) {
+
+		return new SerializationReaderSupport() {
+
+			DataFileStream<T> reader;
+
+			@Override
+			protected Closeable doOpen() throws IOException {
+
+				Resource hdfsResource = getHdfsResourceLoader().getResource(location);
+
+				reader = new DataFileStream<T>(hdfsResource.getInputStream(), new ReflectDatumReader<T>());
+
+				return reader;
+			}
+
+			@Override
+			protected T doRead() throws IOException {
+				return reader.hasNext() ? reader.next() : null;
 			}
 		};
 	}
@@ -83,7 +116,7 @@ public class AvroFormatCreator<T> extends SerializationFormatCreatorSupport<T> {
 	 * @return <b>.avro</b> is the default file extension for Avro serialization.
 	 */
 	@Override
-	public String getExtension() {
+	protected String getDefaultExtension() {
 		return ".avro";
 	}
 
