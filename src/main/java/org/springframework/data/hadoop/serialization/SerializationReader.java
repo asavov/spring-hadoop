@@ -20,6 +20,12 @@ import java.io.Closeable;
 import java.io.IOException;
 
 /**
+ * A strategy interface encapsulating the logic to deserialize objects from HDFS.
+ * 
+ * <p>
+ * Instances of this interface are created by {@link SerializationFormat}.
+ * 
+ * @see {@link SerializationWriter}
  * 
  * @author Alex Savov
  */

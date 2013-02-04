@@ -42,15 +42,15 @@ public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 
 	private SerializationWriterObjectFactory sfObjectFactory;
 
-	private String hdfsLocation;
+	private String location;
 
-	private HdfsResource hdfsResource;
+	private HdfsResource resource;
 
 	@Override
 	public void write(List<? extends T> items) throws Exception {
 
-		sfObjectFactory.setDestination(hdfsLocation);
-		sfObjectFactory.setResource(hdfsResource);
+		sfObjectFactory.setDestination(location);
+		sfObjectFactory.setResource(resource);
 
 		SerializationWriter<T> sFormat = (SerializationWriter<T>) sfObjectFactory.getObject();
 		try {
@@ -63,7 +63,7 @@ public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 	}
 
 	/**
-	 * @param hdfsWriter The {@link SerializationWriterObjectFactory} instance used to write to underlying Hadoop file
+	 * @param sfObjectFactory The {@link SerializationWriterObjectFactory} instance used to write to underlying Hadoop file
 	 * system.
 	 */
 	public void setSerializationFormat(SerializationWriterObjectFactory sfObjectFactory) {
@@ -74,7 +74,7 @@ public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 	 * @param location The HDFS destination file path to write to.
 	 */
 	public void setLocation(String location) {
-		hdfsLocation = location;
+		this.location = location;
 	}
 
 	/**
@@ -83,7 +83,7 @@ public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 	public void setResource(Resource resource) {
 		Assert.isInstanceOf(HdfsResource.class, resource, "A non-null Hdfs Resource is required to write to HDFS.");
 
-		hdfsResource = (HdfsResource) resource;
+		this.resource = (HdfsResource) resource;
 	}
 
 	@Override

@@ -19,10 +19,9 @@ package org.springframework.data.hadoop.serialization;
 import java.io.OutputStream;
 
 /**
- * The interface is responsible to create serizalization format instances. Different implementations might provide
- * different serialization mechanisms, such as Avro or SeqFile.
+ * The interface represents Hadoop specific serialization format, such as Avro or SequenceFile.
  * 
- * @param <T> The type of objects serialized by the {@link SerializationWriter} instance returned by this creator.
+ * @param <T> The type of objects (de)serialized by this serialization format.
  * 
  * @see {@link ResourceSerializationFormat}
  * @see {@link SequenceFileFormat}
@@ -34,25 +33,32 @@ import java.io.OutputStream;
 public interface SerializationFormat<T> {
 
 	/**
-	 * Creates a serialization format that writes to the specified <code>OutputStream</code>.
+	 * Creates a serialization writer that writes to the specified <code>OutputStream</code>.
 	 * 
 	 * <p>
 	 * Note: The output stream is closed upon {@link SerializationWriter#close() closing} the
 	 * <code>SerializationFormat</code> instance.
 	 * 
-	 * @param output The output stream to which created serialization format should write.
+	 * @param output The output stream to write to.
 	 * 
-	 * @return Serialization format that writes to the specified <code>OutputStream</code>.
+	 * @return A Writer that writes to the specified <code>OutputStream</code>.
 	 */
 	SerializationWriter<T> getWriter(OutputStream output);
 
+	/**
+	 * Creates a serialization reader that reads from the specified location.
+	 * 
+	 * @param location The location to read from.
+	 * 
+	 * @return A Reader that reads from the specified location.
+	 */
 	SerializationReader<T> getReader(String location);
 
 	/**
 	 * Gets the filename extension for this kind of serialization format (such as '.avro', '.seqfile' or '.snappy').
 	 * 
 	 * <p>
-	 * It is advisable but not obligatory the output stream passed to {@link #getWriter(OutputStream)} to point a file
+	 * It is advisable but not obligatory the output stream passed to {@link #getWriter(OutputStream)} to point a
 	 * resource with that extension.
 	 * 
 	 * @return The file extension including the '.' char or an <code>empty</code> string if not available.
