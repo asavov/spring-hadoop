@@ -20,6 +20,7 @@ import java.util.List;
 
 import org.springframework.batch.item.ExecutionContext;
 import org.springframework.batch.item.ItemStreamWriter;
+import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.file.MultiResourceItemWriter;
 import org.springframework.batch.item.file.ResourceSuffixCreator;
 import org.springframework.batch.item.file.SimpleResourceSuffixCreator;
@@ -29,6 +30,7 @@ import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
 
 /**
+ * Spring Batch {@link ItemWriter} implementation for writing data to Hadoop using Hadoop serialization formats.
  * Multiple {@link #write(List) writes} demarcated by {@link #open(ExecutionContext) open} and {@link #close() close}
  * methods go to separate HDFS destinations.
  * 
@@ -36,6 +38,7 @@ import org.springframework.util.ClassUtils;
  * Impl note: The class mimics {@link MultiResourceItemWriter}. Unfortunately it could not re-use it cause it's coupled
  * to <code>java.io.File</code> abstraction which is not applicable in HDFS case.
  * 
+ * @see {@link SerializationFormat}
  * @see {@link HdfsItemWriter}
  * @see {@link HdfsItemStreamWriter}
  * 
@@ -54,7 +57,7 @@ public class HdfsMultiResourceItemWriter<T> extends ExecutionContextUserSupport 
 
 	private HdfsItemWriter<T> delegate;
 
-	public HdfsMultiResourceItemWriter() {
+	{
 		setName(ClassUtils.getShortName(HdfsMultiResourceItemWriter.class));
 	}
 

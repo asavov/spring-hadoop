@@ -119,9 +119,9 @@ public class ResourceSerializationFormat extends SerializationFormatSupport<Reso
 	 * Reads the content of the HDFS resource at specified location.
 	 */
 	@Override
-	public SerializationReader<Resource> getReader(final String location) {
+	public SerializationReader<Resource> getReader(String location) {
 		// Extend and customize Serialization Reader template
-		return new SerializationReaderSupport() {
+		return new SerializationReaderSupport(location) {
 
 			private boolean isRead = false;
 

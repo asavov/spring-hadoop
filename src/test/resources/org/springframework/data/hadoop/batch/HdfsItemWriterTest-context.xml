@@ -15,85 +15,102 @@
 		}
 	</hdp:script>
 
-	<!-- The source of objects to write -->
-	<bean id="pojosItemReader" class="org.springframework.batch.item.support.ListItemReader"
-		scope="prototype">
-		<constructor-arg>
-			<bean class="org.springframework.data.hadoop.serialization.HdfsWriterTest"
-				factory-method="createPojoList">
-				<constructor-arg
-					value="org.springframework.data.hadoop.serialization.HdfsWriterTest.PojoWritable" />
-				<constructor-arg value="100" />
-			</bean>
-		</constructor-arg>
-	</bean>
-
 	<!-- Create JAVA serialization format -->
-	<bean id="sequenceFileFormatCreator" class="org.springframework.data.hadoop.serialization.SequenceFileFormatCreator">
-		<constructor-arg
-			value="org.springframework.data.hadoop.serialization.HdfsWriterTest.PojoWritable" />
+	<bean id="sequenceFileFormat" class="org.springframework.data.hadoop.serialization.SequenceFileFormat">
+		<constructor-arg value="org.springframework.data.hadoop.serialization.HdfsWriterTest.PojoWritable" />
 
 		<property name="configuration" ref="hadoopConfiguration" />
+		<property name="hdfsResourceLoader" ref="hadoopResourceLoader" />
 	</bean>
 
 	<!-- Create AVRO serialization format -->
-	<bean id="avroFormatCreator" class="org.springframework.data.hadoop.serialization.AvroFormatCreator">
-		<constructor-arg
-			value="org.springframework.data.hadoop.serialization.HdfsWriterTest.PojoWritable" />
+	<bean id="avroFormat" class="org.springframework.data.hadoop.serialization.AvroFormat">
+		<constructor-arg value="org.springframework.data.hadoop.serialization.HdfsWriterTest.PojoWritable" />
+
+		<property name="hdfsResourceLoader" ref="hadoopResourceLoader" />
 	</bean>
 
-	<!-- Create 'write-to-hdfs' service -->
-	<bean id="sfObjectFactory"
-		class="org.springframework.data.hadoop.serialization.SerializationFormatObjectFactory">
+	<!-- Create Serialization Writer factory -->
+	<bean id="swObjectFactory" class="org.springframework.data.hadoop.serialization.SerializationWriterObjectFactory">
 		<constructor-arg ref="hadoopResourceLoader" />
 
-		<property name="serializationFormatCreator" ref="sequenceFileFormatCreator" />
+		<property name="serializationFormat" ref="sequenceFileFormat" />
 	</bean>
 
-	<!-- Configure single-step jobs writing to hdfs using different writers and completion policies -->
+	<!-- Configure single-step jobs writing to hdfs using different Writers and Completion policies -->
 
 	<bean class="org.springframework.batch.core.scope.StepScope" p:proxyTargetClass="true" />
 
-	<!-- Create HdfsItemWriter -->
-	<bean id="hdfsItemWriter" class="org.springframework.data.hadoop.batch.HdfsItemWriter"
-		p:serializationFormat-ref="sfObjectFactory" p:destination="${hdfs.item.writer.output.dir}hdfsItemWriter"
-		scope="step">
-	</bean>
+	<!-- Provide original objects to write -->
+	<bean id="pojosItemReader" class="org.springframework.data.hadoop.batch.HdfsItemWriterTest.ObjectsReader" scope="step" />
+
+	<!-- Store objects from HDFS -->
+	<bean id="pojosItemWriter" class="org.springframework.data.hadoop.batch.HdfsItemWriterTest.ObjectsWriter" scope="step" />
+
+
+	<!-- HdfsItemWriter: writes all POJOs to a single destination -->
 
 	<bean id="completionPolicy" class="org.springframework.batch.repeat.policy.DefaultResultCompletionPolicy" />
 
+	<!-- Write original objects to HDFS -->
+	<bean id="hdfsItemWriter" class="org.springframework.data.hadoop.batch.HdfsItemWriter" p:serializationFormat-ref="swObjectFactory"
+		p:location="${hdfs.item.writer.output.dir}hdfsItemWriter" scope="step">
+	</bean>
+
+	<!-- Read objects from HDFS -->
+	<bean id="hdfsItemReader" class="org.springframework.data.hadoop.batch.HdfsSerializationItemReader"
+		p:serializationFormat-ref="sequenceFileFormat" p:location="${hdfs.item.writer.output.dir}hdfsItemWriter" scope="step">
+	</bean>
+
 	<job id="hdfsItemWriterJob" xmlns="http://www.springframework.org/schema/batch">
-		<step id="hdfsItemWriterStep">
+		<step id="hdfsItemWriterStep" next="hdfsItemReaderStep">
 			<tasklet>
-				<chunk reader="pojosItemReader" writer="hdfsItemWriter"
-					chunk-completion-policy="completionPolicy" />
+				<chunk reader="pojosItemReader" writer="hdfsItemWriter" chunk-completion-policy="completionPolicy" />
+			</tasklet>
+		</step>
+		<step id="hdfsItemReaderStep">
+			<tasklet>
+				<chunk reader="hdfsItemReader" writer="pojosItemWriter" chunk-completion-policy="completionPolicy" />
 			</tasklet>
 		</step>
 	</job>
 
-	<!-- Create HdfsItemStreamWriter -->
+
+	<!-- HdfsItemStreamWriter: writes all POJOs in chunks of 25 to a single destination -->
+
+	<!-- Write original objects to HDFS -->
 	<bean id="hdfsItemStreamWriter" class="org.springframework.data.hadoop.batch.HdfsItemStreamWriter"
-		p:serializationFormat-ref="sfObjectFactory" p:destination="${hdfs.item.writer.output.dir}hdfsItemStreamWriter"
-		scope="step">
+		p:serializationFormat-ref="swObjectFactory" p:location="${hdfs.item.writer.output.dir}hdfsItemStreamWriter" scope="step">
 	</bean>
+	
+	<!-- Read objects from HDFS -->
+	<bean id="hdfsItemStreamReader" class="org.springframework.data.hadoop.batch.HdfsSerializationItemReader"
+		p:serializationFormat-ref="sequenceFileFormat" p:location="${hdfs.item.writer.output.dir}hdfsItemStreamWriter" scope="step">
+	</bean>	
+	
 	<job id="hdfsItemStreamWriterJob" xmlns="http://www.springframework.org/schema/batch">
-		<step id="hdfsItemStreamWriterStep">
+		<step id="hdfsItemStreamWriterStep" next="hdfsItemStreamReaderStep">
 			<tasklet>
 				<chunk reader="pojosItemReader" writer="hdfsItemStreamWriter" commit-interval="25" />
 			</tasklet>
 		</step>
+		<step id="hdfsItemStreamReaderStep">
+			<tasklet>
+				<chunk reader="hdfsItemStreamReader" writer="pojosItemWriter" commit-interval="25" />
+			</tasklet>
+		</step>		
 	</job>
 
-	<!-- Create HdfsMultiResourceItemWriter -->
+
+	<!-- HdfsMultiResourceItemWriter: writes every chunk of 25 POJOs to a separate destination -->
+
 	<bean id="hdfsMultiResourceItemWriter" class="org.springframework.data.hadoop.batch.HdfsMultiResourceItemWriter"
-		p:delegate-ref="hdfsItemWriter" p:baseDestination="${hdfs.item.writer.output.dir}hdfsMultiResourceItemWriter"
-		scope="step">
+		p:delegate-ref="hdfsItemWriter" p:baseLocation="${hdfs.item.writer.output.dir}hdfsMultiResourceItemWriter" scope="step">
 	</bean>
 	<job id="hdfsMultiResourceItemWriterJob" xmlns="http://www.springframework.org/schema/batch">
 		<step id="hdfsMultiResourceItemWriterStep">
 			<tasklet>
-				<chunk reader="pojosItemReader" writer="hdfsMultiResourceItemWriter"
-					commit-interval="25" />
+				<chunk reader="pojosItemReader" writer="hdfsMultiResourceItemWriter" commit-interval="25" />
 			</tasklet>
 		</step>
 	</job>

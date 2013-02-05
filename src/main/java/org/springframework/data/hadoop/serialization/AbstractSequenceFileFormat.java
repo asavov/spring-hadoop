@@ -179,10 +179,8 @@ public abstract class AbstractSequenceFileFormat<T> extends SerializationFormatS
 		/* Native SeqFile reader. */
 		protected SequenceFile.Reader reader;
 
-		protected final String location;
-
 		protected AbstractSequenceFileReader(String location) {
-			this.location = location;
+			super(location);
 		}
 
 		@Override

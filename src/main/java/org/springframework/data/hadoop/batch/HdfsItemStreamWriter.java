@@ -24,6 +24,7 @@ import java.util.List;
 import org.springframework.batch.item.ExecutionContext;
 import org.springframework.batch.item.ItemStreamException;
 import org.springframework.batch.item.ItemStreamSupport;
+import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.file.ResourceAwareItemWriterItemStream;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.core.io.Resource;
@@ -34,9 +35,11 @@ import org.springframework.data.hadoop.serialization.SerializationWriterObjectFa
 import org.springframework.util.Assert;
 
 /**
+ * Spring Batch {@link ItemWriter} implementation for writing data to Hadoop using Hadoop serialization formats.
  * Multiple {@link #write(List) writes} demarcated by {@link #open(ExecutionContext) open} and {@link #close() close}
  * methods are aggregated and go to a single HDFS destination.
  * 
+ * @see {@link SerializationFormat}
  * @see {@link HdfsItemWriter}
  * @see {@link HdfsMultiResourceItemWriter}
  * 
@@ -45,22 +48,29 @@ import org.springframework.util.Assert;
 public class HdfsItemStreamWriter<T> extends ItemStreamSupport implements ResourceAwareItemWriterItemStream<T>,
 		InitializingBean {
 
+	/* The Writer provides core 'write objects to Hadoop' logic. Its lifecycle is demarcated by 'open-close' methods. */
+	private SerializationWriter<T> serializationWriter;
+
+	// The properties are publicly configurable.
+
+	/* HDFS location to write to. */
+	private String location;
+
+	/* HDFS resource to write to. */
+	private HdfsResource resource;
+
+	/* The factory used to open/create serialization writers to passed HDFS destination. */
 	private SerializationWriterObjectFactory sfObjectFactory;
 
-	private String hdfsLocation;
-
-	private HdfsResource hdfsResource;
-
-	private SerializationWriter<T> serializationFormat;
-
+	@SuppressWarnings("unchecked")
 	@Override
 	public void open(ExecutionContext executionContext) {
 
-		sfObjectFactory.setDestination(hdfsLocation);
-		sfObjectFactory.setResource(hdfsResource);
+		sfObjectFactory.setDestination(location);
+		sfObjectFactory.setResource(resource);
 
 		try {
-			serializationFormat = (SerializationWriter<T>) sfObjectFactory.getObject();
+			serializationWriter = (SerializationWriter<T>) sfObjectFactory.getObject();
 		} catch (Exception e) {
 			throw new ItemStreamException(e);
 		}
@@ -72,7 +82,7 @@ public class HdfsItemStreamWriter<T> extends ItemStreamSupport implements Resour
 		// Write/Append all items to opened HDFS resource
 
 		for (T item : items) {
-			serializationFormat.write(item);
+			serializationWriter.write(item);
 		}
 	}
 
@@ -81,9 +91,9 @@ public class HdfsItemStreamWriter<T> extends ItemStreamSupport implements Resour
 
 		// Close serialization format
 
-		closeStream(serializationFormat);
+		closeStream(serializationWriter);
 
-		serializationFormat = null;
+		serializationWriter = null;
 	}
 
 	/**
@@ -98,7 +108,7 @@ public class HdfsItemStreamWriter<T> extends ItemStreamSupport implements Resour
 	 * @param location The HDFS destination file path to write to.
 	 */
 	public void setLocation(String location) {
-		hdfsLocation = location;
+		this.location = location;
 	}
 
 	/**
@@ -108,7 +118,7 @@ public class HdfsItemStreamWriter<T> extends ItemStreamSupport implements Resour
 	public void setResource(Resource resource) {
 		Assert.isInstanceOf(HdfsResource.class, resource, "A non-null Hdfs Resource is required to write to HDFS.");
 
-		hdfsResource = (HdfsResource) resource;
+		this.resource = (HdfsResource) resource;
 	}
 
 	@Override

@@ -410,11 +410,9 @@ public class HdfsWriterTest {
 			String destination) throws Exception {
 
 		// Delegate to core SerializationFormat logic.
-		sfObjectFactory.setSerializationFormatCreator(serializationCreator);
+		sfObjectFactory.setSerializationFormat(serializationCreator);
 
-		SerializationFormatOperations serializationOperations = new SerializationFormatTemplate(sfObjectFactory);
-
-		serializationOperations.write(destination, new SerializationWriterCallback<T>() {
+		new SerializationFormatTemplate(sfObjectFactory).write(destination, new SerializationWriterCallback<T>() {
 			@Override
 			public void doInSerializationFormat(SerializationWriter<T> serializationFormat) throws IOException {
 				for (T source : sources) {

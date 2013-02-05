@@ -16,55 +16,60 @@
 
 package org.springframework.data.hadoop.batch;
 
-import static org.apache.hadoop.io.IOUtils.closeStream;
-
+import java.io.IOException;
 import java.util.List;
 
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.core.io.Resource;
 import org.springframework.data.hadoop.fs.HdfsResource;
+import org.springframework.data.hadoop.serialization.SerializationFormat;
+import org.springframework.data.hadoop.serialization.SerializationFormatOperations.SerializationWriterCallback;
+import org.springframework.data.hadoop.serialization.SerializationFormatTemplate;
 import org.springframework.data.hadoop.serialization.SerializationWriter;
 import org.springframework.data.hadoop.serialization.SerializationWriterObjectFactory;
 import org.springframework.util.Assert;
 
 /**
- * Every {@link #write(List) write} goes to a single HDFS destination and overrides existing content.
+ * Spring Batch {@link ItemWriter} implementation for writing data to Hadoop using Hadoop serialization formats. Every
+ * {@link #write(List) write} goes to a single HDFS destination and overrides existing content.
  * 
+ * @see {@link SerializationFormat}
  * @see {@link HdfsItemStreamWriter}
  * @see {@link HdfsMultiResourceItemWriter}
  * 
  * @author Alex Savov
- * 
- * @deprecated Functionally replaced by {@link HdfsItemStreamWriter}. Althought will keep it.
  */
 public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
 
-	private SerializationWriterObjectFactory sfObjectFactory;
+	// The properties are publicly configurable.
 
+	/* HDFS location to write to. */
 	private String location;
 
+	/* HDFS resource to write to. */
 	private HdfsResource resource;
 
+	/* The factory used to open/create serialization writers to passed HDFS destination. */
+	private SerializationWriterObjectFactory sfObjectFactory;
+
 	@Override
-	public void write(List<? extends T> items) throws Exception {
+	public void write(final List<? extends T> items) throws Exception {
 
-		sfObjectFactory.setDestination(location);
 		sfObjectFactory.setResource(resource);
-
-		SerializationWriter<T> sFormat = (SerializationWriter<T>) sfObjectFactory.getObject();
-		try {
-			for (T item : items) {
-				sFormat.write(item);
+		
+		new SerializationFormatTemplate(sfObjectFactory).write(location, new SerializationWriterCallback<T>() {
+			@Override
+			public void doInSerializationFormat(SerializationWriter<T> serializationFormat) throws IOException {
+				for (T item : items) {
+					serializationFormat.write(item);
+				}
 			}
-		} finally {
-			closeStream(sFormat);
-		}
+		});
 	}
 
 	/**
-	 * @param sfObjectFactory The {@link SerializationWriterObjectFactory} instance used to write to underlying Hadoop file
-	 * system.
+	 * @param sfObjectFactory The {@link SerializationWriterObjectFactory} instance used to write to Hadoop.
 	 */
 	public void setSerializationFormat(SerializationWriterObjectFactory sfObjectFactory) {
 		this.sfObjectFactory = sfObjectFactory;

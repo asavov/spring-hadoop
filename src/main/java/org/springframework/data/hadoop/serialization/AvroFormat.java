@@ -89,9 +89,9 @@ public class AvroFormat<T> extends SerializationFormatSupport<T> {
 	 * Reads POJOs using <code>Avro</code> serialization.
 	 */
 	@Override
-	public SerializationReader<T> getReader(final String location) {
+	public SerializationReader<T> getReader(String location) {
 
-		return new SerializationReaderSupport() {
+		return new SerializationReaderSupport(location) {
 
 			DataFileStream<T> reader;
 

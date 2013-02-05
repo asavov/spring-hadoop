@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2012 the original author or authors.
+ * Copyright 2013 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,11 @@
 
 package org.springframework.data.hadoop.batch;
 
+import static org.springframework.util.StringUtils.hasText;
+
 import java.io.IOException;
 
+import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.file.ResourceAwareItemReaderItemStream;
 import org.springframework.batch.item.support.AbstractItemCountingItemStreamItemReader;
 import org.springframework.beans.factory.InitializingBean;
@@ -25,20 +28,35 @@ import org.springframework.core.io.Resource;
 import org.springframework.data.hadoop.serialization.SerializationFormat;
 import org.springframework.data.hadoop.serialization.SerializationReader;
 import org.springframework.util.Assert;
+import org.springframework.util.ClassUtils;
 
 /**
+ * Spring Batch {@link ItemReader} implementation for reading data from Hadoop using serialization formats.
  * 
- * @author asavov
+ * @see {@link SerializationFormat}
+ * 
+ * @author Alex Savov
  */
-public class HdfsSerializationItemReader<T> extends AbstractItemCountingItemStreamItemReader<T> implements ResourceAwareItemReaderItemStream<T>, InitializingBean {
+public class HdfsSerializationItemReader<T> extends AbstractItemCountingItemStreamItemReader<T> implements
+		ResourceAwareItemReaderItemStream<T>, InitializingBean {
 
+	/* The Reader provides core 'read objects from Hadoop' logic. Its lifecycle is demarcated by 'open-close' methods. */
+	private SerializationReader<T> serializationReader;
+
+	// The properties are publicly configurable.
+
+	/* The HDFS serialization format used to read objects. */
 	private SerializationFormat<T> serializationFormat;
 
+	/* HDFS location to read from. */
 	private String location;
 
+	/* HDFS resource to read from. */
 	private Resource resource;
-	
-	private SerializationReader<T> serializationReader;
+
+	{
+		setName(ClassUtils.getShortName(HdfsSerializationItemReader.class));
+	}
 
 	/**
 	 * @param location The HDFS destination file path to read from.
@@ -55,18 +73,32 @@ public class HdfsSerializationItemReader<T> extends AbstractItemCountingItemStre
 	}
 
 	/**
-	 * @param serializationFormat The {@link SerializationFormat} instance used to read from underlying Hadoop file
-	 * system.
+	 * @param serializationFormat The {@link SerializationFormat} instance used to read objects from Hadoop.
 	 */
 	public void setSerializationFormat(SerializationFormat<T> serializationFormat) {
 		this.serializationFormat = serializationFormat;
 	}
 
+	//
+	// Adapt Serialization Reader to Spring Batch Item Reader contract {{
+	//
+
 	@Override
 	protected void doOpen() throws IOException {
-		serializationReader = serializationFormat.getReader(location);
+		if (hasText(location)) {
+
+			serializationReader = serializationFormat.getReader(location);
+
+		} else if (resource != null) {
+
+			// Passed resource is used only to get its URI.
+			serializationReader = serializationFormat.getReader(resource.getURI().toString());
+
+		} else {
+			Assert.state(false, "Set either 'location' or 'resource' property.");
+		}
 	}
-	
+
 	@Override
 	protected T doRead() throws IOException {
 		return serializationReader.read();
@@ -75,12 +107,14 @@ public class HdfsSerializationItemReader<T> extends AbstractItemCountingItemStre
 	@Override
 	protected void doClose() throws IOException {
 		serializationReader.close();
+		serializationReader = null;
 	}
-	
+
+	// }}
+
 	@Override
 	public void afterPropertiesSet() throws Exception {
 		Assert.notNull(serializationFormat, "A non-null SerializationFormat is required.");
 	}
-	
 
 }

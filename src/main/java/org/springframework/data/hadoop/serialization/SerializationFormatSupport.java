@@ -21,6 +21,7 @@ import java.io.Closeable;
 import java.io.IOException;
 
 import org.springframework.data.hadoop.fs.HdfsResourceLoader;
+import org.springframework.util.Assert;
 
 /**
  * The class provides common functionality needed by {@link SerializationFormat} implementations. It includes support
@@ -100,6 +101,7 @@ public abstract class SerializationFormatSupport<T> implements SerializationForm
 	 * @return the hdfsResourceLoader
 	 */
 	protected HdfsResourceLoader getHdfsResourceLoader() {
+		Assert.notNull(hdfsResourceLoader, "A non-null HdfsResourceLoader is required.");		
 		return hdfsResourceLoader;
 	}
 
@@ -137,6 +139,13 @@ public abstract class SerializationFormatSupport<T> implements SerializationForm
 	 */
 	protected abstract class SerializationReaderSupport extends OpenCloseSupport implements SerializationReader<T> {
 
+		protected final String location;
+
+		protected SerializationReaderSupport(String location) {
+			// TODO: Extract to utility class and do not couple to SerializationWriterObjectFactory!
+			this.location = SerializationWriterObjectFactory.canonicalSerializationDestination(SerializationFormatSupport.this, location);
+		}
+		
 		/**
 		 * <ul>
 		 * <li>Lazy open the Reader upon first read.</li>
