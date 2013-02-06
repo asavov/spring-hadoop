@@ -49,7 +49,7 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.util.ClassUtils;
 
 /**
- * Integration test for {@link SerializationWriterFactoryBean} testing simple and compressed writes of a file to HDFS.
+ * Integration test for {@link SerializationFormat} testing simple and compressed writes of a file and objects to HDFS.
  * 
  * @author Alex Savov
  */
@@ -63,15 +63,11 @@ public class HdfsWriterTest {
 	@Autowired
 	private Configuration configuration;
 
-	/**
-	 * The file that's written to HDFS with[out] compression.
-	 */
+	/* The file that's written to HDFS with[out] compression. */
 	@Value("classpath:/data/apache-short.txt")
 	private Resource sourceResource;
 
-	/**
-	 * All output files are written to that HDFS dir.
-	 */
+	/* All output files are written to that HDFS dir. */
 	@Value("${hdfs.writer.output.dir}")
 	private String hdfsOutputDir;
 
@@ -399,10 +395,10 @@ public class HdfsWriterTest {
 			for (T readObject = reader.read(); readObject != null; readObject = reader.read()) {
 				readObjects.add(readObject);
 			}
-			
+
 			closeStream(reader);
 		}
-		
+
 		assertEquals(objects, readObjects);
 	}
 

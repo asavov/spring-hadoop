@@ -31,13 +31,14 @@ import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
 
 /**
- * Spring Batch {@link ItemReader} implementation for reading data from Hadoop using serialization formats.
+ * Spring Batch {@link ItemReader} implementation for reading data from a single HDFS resource using serialization
+ * format.
  * 
  * @see {@link SerializationFormat}
  * 
  * @author Alex Savov
  */
-public class HdfsSerializationItemReader<T> extends AbstractItemCountingItemStreamItemReader<T> implements
+public class HdfsSerializationFormatItemReader<T> extends AbstractItemCountingItemStreamItemReader<T> implements
 		ResourceAwareItemReaderItemStream<T>, InitializingBean {
 
 	/* The Reader provides core 'read objects from Hadoop' logic. Its lifecycle is demarcated by 'open-close' methods. */
@@ -55,28 +56,8 @@ public class HdfsSerializationItemReader<T> extends AbstractItemCountingItemStre
 	private Resource resource;
 
 	{
-		setName(ClassUtils.getShortName(HdfsSerializationItemReader.class));
-	}
-
-	/**
-	 * @param location The HDFS destination file path to read from.
-	 */
-	public void setLocation(String location) {
-		this.location = location;
-	}
-
-	/**
-	 * @param resource The {@link Resource} instance to read from.
-	 */
-	public void setResource(Resource resource) {
-		this.resource = resource;
-	}
-
-	/**
-	 * @param serializationFormat The {@link SerializationFormat} instance used to read objects from Hadoop.
-	 */
-	public void setSerializationFormat(SerializationFormat<T> serializationFormat) {
-		this.serializationFormat = serializationFormat;
+		/* Initialize the name for the key in the execution context. */
+		setName(ClassUtils.getShortName(HdfsSerializationFormatItemReader.class));
 	}
 
 	//
@@ -111,6 +92,28 @@ public class HdfsSerializationItemReader<T> extends AbstractItemCountingItemStre
 	}
 
 	// }}
+
+	/**
+	 * @param location The HDFS destination file path to read from.
+	 */
+	public void setLocation(String location) {
+		this.location = location;
+	}
+
+	/**
+	 * @param resource The {@link Resource} instance to read from.
+	 */
+	@Override
+	public void setResource(Resource resource) {
+		this.resource = resource;
+	}
+
+	/**
+	 * @param serializationFormat The {@link SerializationFormat} instance used to read objects from Hadoop.
+	 */
+	public void setSerializationFormat(SerializationFormat<T> serializationFormat) {
+		this.serializationFormat = serializationFormat;
+	}
 
 	@Override
 	public void afterPropertiesSet() throws Exception {

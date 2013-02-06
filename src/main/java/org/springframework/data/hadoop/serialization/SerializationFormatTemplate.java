@@ -39,6 +39,7 @@ public class SerializationFormatTemplate implements SerializationFormatOperation
 
 		sfObjectFactory.setDestination(destination);
 
+		@SuppressWarnings("unchecked")
 		SerializationWriter<T> serialization = (SerializationWriter<T>) sfObjectFactory.getObject();
 
 		try {

@@ -44,53 +44,16 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 /**
+ * Integration test for different HDFS specific Spring Batch Item Writers/Readers.
+ * 
+ * The test writes objects to HDFS, reads them back and asserts they are equal.
+ * 
  * @author Alex Savov
  */
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration
 // TODO: maybe split it.
-public class HdfsItemWriterTest {
-
-	public static class ObjectsReader implements ItemReader<PojoWritable> {
-
-		public final static String ORIGINAL_OBJECTS = "originalObjects";
-
-		private ItemReader<PojoWritable> originalObjectsReader;
-
-		@BeforeStep
-		public void beforeStep(StepExecution stepExecution) throws Exception {
-
-			List<PojoWritable> originalObjects = HdfsWriterTest.createPojoList(PojoWritable.class, 1);
-
-			originalObjectsReader = new IteratorItemReader<HdfsWriterTest.PojoWritable>(originalObjects);
-
-			stepExecution.getJobExecution().getExecutionContext().put(ORIGINAL_OBJECTS, originalObjects);
-		}
-
-		@Override
-		public PojoWritable read() throws Exception, UnexpectedInputException, ParseException,
-				NonTransientResourceException {
-			return originalObjectsReader.read();
-		}
-	}
-
-	public static class ObjectsWriter implements ItemWriter<PojoWritable> {
-
-		public static final String OBJECTS_FROM_HDFS = "objectsFromHdfs";
-
-		private List<PojoWritable> objectsFromHdfs = new LinkedList<PojoWritable>();
-
-		@AfterStep
-		public void afterStep(StepExecution stepExecution) throws Exception {
-
-			stepExecution.getJobExecution().getExecutionContext().put(OBJECTS_FROM_HDFS, objectsFromHdfs);
-		}
-
-		@Override
-		public void write(List<? extends PojoWritable> items) throws Exception {
-			objectsFromHdfs.addAll(items);
-		}
-	}
+public class HdfsSerializationFormatWriteReadTest {
 
 	@Autowired
 	private JobLauncher jobLauncher;
@@ -110,28 +73,88 @@ public class HdfsItemWriterTest {
 	@Test
 	public void hdfsItemWriterJob() throws Exception {
 
-		JobExecution job = jobLauncher.run(hdfsItemWriterJob, new JobParameters());
-
-		ExecutionContext jobContext = job.getExecutionContext();
-
-		assertEquals(jobContext.get(ObjectsReader.ORIGINAL_OBJECTS), jobContext.get(ObjectsWriter.OBJECTS_FROM_HDFS));
+		writeReadTest(hdfsItemWriterJob);
 	}
 
 	@Test
 	public void hdfsItemStreamWriterJob() throws Exception {
 
-		JobExecution job = jobLauncher.run(hdfsItemStreamWriterJob, new JobParameters());
-
-		ExecutionContext jobContext = job.getExecutionContext();
-
-		assertEquals(jobContext.get(ObjectsReader.ORIGINAL_OBJECTS), jobContext.get(ObjectsWriter.OBJECTS_FROM_HDFS));
-
+		writeReadTest(hdfsItemStreamWriterJob);
 	}
 
 	@Test
 	public void hdfsMultiResourceItemWriterJob() throws Exception {
 
-		jobLauncher.run(hdfsMultiResourceItemWriterJob, new JobParameters());
+		writeReadTest(hdfsMultiResourceItemWriterJob);
+	}
+
+	protected void writeReadTest(Job writeReadJob) throws Exception {
+
+		// Run "write-read" job.
+		JobExecution job = jobLauncher.run(writeReadJob, new JobParameters());
+
+		ExecutionContext jobContext = job.getExecutionContext();
+
+		// Assert equality of original and read-back objects.
+		assertEquals(jobContext.get(ObjectsReader.ORIGINAL_OBJECTS), jobContext.get(ObjectsWriter.OBJECTS_FROM_HDFS));
+	}
+
+	/**
+	 * Provides objects that should be written to the HDFS.
+	 */
+	public static class ObjectsReader implements ItemReader<PojoWritable> {
+
+		public final static String ORIGINAL_OBJECTS = "originalObjects";
+
+		private ItemReader<PojoWritable> originalObjectsReader;
+
+		private int objectsCount = 100;
+
+		@BeforeStep
+		public void beforeStep(StepExecution stepExecution) throws Exception {
+
+			// The original objects to write.
+			List<PojoWritable> originalObjects = HdfsWriterTest.createPojoList(PojoWritable.class, objectsCount);
+
+			// Export/Share original objects for later usage.
+			stepExecution.getJobExecution().getExecutionContext().put(ORIGINAL_OBJECTS, originalObjects);
+
+			// Create core ItemReader to do the reading.
+			originalObjectsReader = new IteratorItemReader<HdfsWriterTest.PojoWritable>(originalObjects);
+		}
+
+		/** Configure the number of objects to provide. */
+		public void setObjectsCount(int objectsCount) {
+			this.objectsCount = objectsCount;
+		}
+
+		@Override
+		public PojoWritable read() throws Exception, UnexpectedInputException, ParseException,
+				NonTransientResourceException {
+			return originalObjectsReader.read();
+		}
+	}
+
+	/**
+	 * Store objects that are read back from HDFS.
+	 */
+	public static class ObjectsWriter implements ItemWriter<PojoWritable> {
+
+		public static final String OBJECTS_FROM_HDFS = "objectsFromHdfs";
+
+		private List<PojoWritable> objectsFromHdfs = new LinkedList<PojoWritable>();
+
+		@AfterStep
+		public void afterStep(StepExecution stepExecution) throws Exception {
+
+			// Export/Share objects from HDFS for later usage.
+			stepExecution.getJobExecution().getExecutionContext().put(OBJECTS_FROM_HDFS, objectsFromHdfs);
+		}
+
+		@Override
+		public void write(List<? extends PojoWritable> items) throws Exception {
+			objectsFromHdfs.addAll(items);
+		}
 	}
 
 }

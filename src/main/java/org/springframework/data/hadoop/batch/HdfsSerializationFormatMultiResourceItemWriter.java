@@ -35,16 +35,16 @@ import org.springframework.util.ClassUtils;
  * methods go to separate HDFS destinations.
  * 
  * <p>
- * Impl note: The class mimics {@link MultiResourceItemWriter}. Unfortunately it could not re-use it cause it's coupled
+ * Impl note: The class mimics {@link MultiResourceItemWriter}. Unfortunately it could not be re-used cause it's coupled
  * to <code>java.io.File</code> abstraction which is not applicable in HDFS case.
  * 
  * @see {@link SerializationFormat}
- * @see {@link HdfsItemWriter}
- * @see {@link HdfsItemStreamWriter}
+ * @see {@link HdfsSerializationFormatItemWriter}
+ * @see {@link HdfsSerializationFormatItemStreamWriter}
  * 
  * @author Alex Savov
  */
-public class HdfsMultiResourceItemWriter<T> extends ExecutionContextUserSupport implements ItemStreamWriter<T>,
+public class HdfsSerializationFormatMultiResourceItemWriter<T> extends ExecutionContextUserSupport implements ItemStreamWriter<T>,
 		InitializingBean {
 
 	private final static String RESOURCE_INDEX_KEY = "resource.index";
@@ -55,11 +55,16 @@ public class HdfsMultiResourceItemWriter<T> extends ExecutionContextUserSupport 
 
 	private ResourceSuffixCreator suffixCreator = new SimpleResourceSuffixCreator();
 
-	private HdfsItemWriter<T> delegate;
+	private HdfsSerializationFormatItemWriter<T> delegate;
 
 	{
-		setName(ClassUtils.getShortName(HdfsMultiResourceItemWriter.class));
+		/* Initialize the name for the key in the execution context. */
+		setName(ClassUtils.getShortName(HdfsSerializationFormatMultiResourceItemWriter.class));
 	}
+
+	//
+	// Adapt Serialization Writer to Spring Batch Item Writer contract {{
+	//
 
 	public void write(List<? extends T> items) throws Exception {
 
@@ -68,36 +73,6 @@ public class HdfsMultiResourceItemWriter<T> extends ExecutionContextUserSupport 
 		delegate.setLocation(location);
 
 		delegate.write(items);
-	}
-
-	/**
-	 * Every {@link #write(List) write} is delegated to that instance.
-	 */
-	public void setDelegate(HdfsItemWriter<T> delegate) {
-		this.delegate = delegate;
-	}
-
-	/**
-	 * Prototype for HDFS destination file path. The prototype will be appended with a suffix (according to
-	 * {@link #setResourceSuffixCreator(ResourceSuffixCreator)} to build the actual paths.
-	 */
-	public void setBaseLocation(String baseLocation) {
-		this.baseLocation = baseLocation;
-	}
-
-	/**
-	 * Customize the suffix of the HDFS destination file path to which every
-	 * {@link HdfsMultiResourceItemWriter#write(List) write} goes. The suffix returned is appended to provided
-	 * {@link #setBaseLocation(String) base destination}.
-	 */
-	public void setResourceSuffixCreator(ResourceSuffixCreator resourceSuffixCreator) {
-		this.suffixCreator = resourceSuffixCreator;
-	}
-
-	@Override
-	public void afterPropertiesSet() throws Exception {
-		Assert.notNull(delegate, "A non-null HdfsItemWriter is required.");
-		Assert.notNull(suffixCreator, "A non-null ResourceSuffixCreator is required.");
 	}
 
 	@Override
@@ -113,6 +88,38 @@ public class HdfsMultiResourceItemWriter<T> extends ExecutionContextUserSupport 
 	@Override
 	public void close() {
 		resourceIndex = -1;
+	}
+
+	// }}
+
+	/**
+	 * Every {@link #write(List) write} is delegated to that instance.
+	 */
+	public void setDelegate(HdfsSerializationFormatItemWriter<T> delegate) {
+		this.delegate = delegate;
+	}
+
+	/**
+	 * Prototype for HDFS destination file path. The prototype will be appended with a suffix (according to
+	 * {@link #setResourceSuffixCreator(ResourceSuffixCreator)} to build the actual paths.
+	 */
+	public void setBaseLocation(String baseLocation) {
+		this.baseLocation = baseLocation;
+	}
+
+	/**
+	 * Customize the suffix of the HDFS destination file path to which every
+	 * {@link HdfsSerializationFormatMultiResourceItemWriter#write(List) write} goes. The suffix returned is appended to provided
+	 * {@link #setBaseLocation(String) base destination}.
+	 */
+	public void setResourceSuffixCreator(ResourceSuffixCreator resourceSuffixCreator) {
+		this.suffixCreator = resourceSuffixCreator;
+	}
+
+	@Override
+	public void afterPropertiesSet() throws Exception {
+		Assert.notNull(delegate, "A non-null HdfsSerializationFormatItemWriter is required.");
+		Assert.notNull(suffixCreator, "A non-null ResourceSuffixCreator is required.");
 	}
 
 }

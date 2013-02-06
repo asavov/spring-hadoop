@@ -26,7 +26,8 @@ import org.springframework.util.ClassUtils;
 
 /**
  * Spring Batch {@link ItemReader} implementation for Hadoop {@link FileSystem}.
- * This class exists as it has to do the conversion manually since there's no pluggable
+ * 
+ * <p>This class exists as it has to do the conversion manually since there's no pluggable
  * way to add another resource loader.
  *
  * @param <T> the generic type
@@ -70,7 +71,8 @@ public class HdfsItemReader<T> extends FlatFileItemReader<T> {
 
 
 	@Override
-	protected void doOpen() throws Exception {
+	protected void doOpen() throws Exception {		
+		// @Costin: this is the private 'resource' which is NEVER set.
 		if (resource == null) {
 			Assert.hasText(location, "either a resource or a location need to be specified");
 			resource = loader.getResource(location);
@@ -80,6 +82,13 @@ public class HdfsItemReader<T> extends FlatFileItemReader<T> {
 
 		setResource(resource);
 		super.doOpen();
+		
+		/* @Costin: how about that version ?
+		if (hasText(location)) {
+			setResource(loader.getResource(location));
+		}		
+		super.doOpen();
+		*/
 	}
 
 	/**

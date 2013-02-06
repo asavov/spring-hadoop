@@ -35,12 +35,12 @@ import org.springframework.util.Assert;
  * {@link #write(List) write} goes to a single HDFS destination and overrides existing content.
  * 
  * @see {@link SerializationFormat}
- * @see {@link HdfsItemStreamWriter}
- * @see {@link HdfsMultiResourceItemWriter}
+ * @see {@link HdfsSerializationFormatItemStreamWriter}
+ * @see {@link HdfsSerializationFormatMultiResourceItemWriter}
  * 
  * @author Alex Savov
  */
-public class HdfsItemWriter<T> implements ItemWriter<T>, InitializingBean {
+public class HdfsSerializationFormatItemWriter<T> implements ItemWriter<T>, InitializingBean {
 
 	// The properties are publicly configurable.
 

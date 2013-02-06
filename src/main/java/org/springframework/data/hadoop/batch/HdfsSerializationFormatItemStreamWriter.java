@@ -40,12 +40,12 @@ import org.springframework.util.Assert;
  * methods are aggregated and go to a single HDFS destination.
  * 
  * @see {@link SerializationFormat}
- * @see {@link HdfsItemWriter}
- * @see {@link HdfsMultiResourceItemWriter}
+ * @see {@link HdfsSerializationFormatItemWriter}
+ * @see {@link HdfsSerializationFormatMultiResourceItemWriter}
  * 
  * @author Alex Savov
  */
-public class HdfsItemStreamWriter<T> extends ItemStreamSupport implements ResourceAwareItemWriterItemStream<T>,
+public class HdfsSerializationFormatItemStreamWriter<T> extends ItemStreamSupport implements ResourceAwareItemWriterItemStream<T>,
 		InitializingBean {
 
 	/* The Writer provides core 'write objects to Hadoop' logic. Its lifecycle is demarcated by 'open-close' methods. */
@@ -62,6 +62,13 @@ public class HdfsItemStreamWriter<T> extends ItemStreamSupport implements Resour
 	/* The factory used to open/create serialization writers to passed HDFS destination. */
 	private SerializationWriterObjectFactory sfObjectFactory;
 
+	//
+	// Adapt Serialization Writer to Spring Batch Item Writer contract {{
+	//
+
+	/**
+	 * Create Serialization Writer with passed parameters.
+	 */
 	@SuppressWarnings("unchecked")
 	@Override
 	public void open(ExecutionContext executionContext) {
@@ -69,32 +76,31 @@ public class HdfsItemStreamWriter<T> extends ItemStreamSupport implements Resour
 		sfObjectFactory.setDestination(location);
 		sfObjectFactory.setResource(resource);
 
-		try {
-			serializationWriter = (SerializationWriter<T>) sfObjectFactory.getObject();
-		} catch (Exception e) {
-			throw new ItemStreamException(e);
-		}
+		serializationWriter = (SerializationWriter<T>) sfObjectFactory.getObject();
 	}
 
+	/**
+	 * Write all items to opened Serialization Writer.
+	 */
 	@Override
 	public void write(List<? extends T> items) throws IOException {
-
-		// Write/Append all items to opened HDFS resource
-
 		for (T item : items) {
 			serializationWriter.write(item);
 		}
 	}
 
+	/**
+	 * Close the Serialization Writer.
+	 */
 	@Override
-	public void close() throws ItemStreamException {
-
-		// Close serialization format
+	public void close() {
 
 		closeStream(serializationWriter);
 
 		serializationWriter = null;
 	}
+
+	// }}
 
 	/**
 	 * @param hdfsWriter The {@link SerializationWriterFactoryBean} instance used to write to underlying Hadoop file
