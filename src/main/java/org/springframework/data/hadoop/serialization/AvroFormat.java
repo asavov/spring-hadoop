@@ -18,14 +18,19 @@ package org.springframework.data.hadoop.serialization;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 
 import org.apache.avro.Schema;
+import org.apache.avro.file.DataFileReader;
 import org.apache.avro.file.DataFileStream;
 import org.apache.avro.file.DataFileWriter;
+import org.apache.avro.file.FileReader;
+import org.apache.avro.file.SeekableInput;
 import org.apache.avro.reflect.ReflectData;
 import org.apache.avro.reflect.ReflectDatumReader;
 import org.apache.avro.reflect.ReflectDatumWriter;
+import org.apache.hadoop.fs.Seekable;
 import org.springframework.core.io.Resource;
 
 /**
@@ -93,14 +98,55 @@ public class AvroFormat<T> extends SerializationFormatSupport<T> {
 
 		return new SerializationReaderSupport(location) {
 
-			DataFileStream<T> reader;
+			/* Native Avro reader. */
+			FileReader<T> reader;
 
 			@Override
 			protected Closeable doOpen() throws IOException {
 
-				Resource hdfsResource = getHdfsResourceLoader().getResource(location);
+				final Resource hdfsResource = getHdfsResourceLoader().getResource(location);
+				final InputStream delegate = hdfsResource.getInputStream();
+				
+				/*
+				 * Adapts Hadoop FSDataInputStream and CompressionInputStream to Avro SeekableInput.
+				 * 
+				 * Both Hadoop input streams implement Seekable interface which is 'easily' adapted to SeekableInput.
+				 * 
+				 * The HdfsResource (as returned by HDFS RL) returns either of above depending on 'useCodecs' prop, so
+				 * we can 'safely' cast to Seekable ( so far:) ).
+				 * 
+				 * BACKUP: If the stream is not Seekable then we can fall back to Avro DataFileStream as a reader. It
+				 * accepts simple InputStream, but sacrificing the 'seeking'.
+				 */
+				SeekableInput seekableInput = new SeekableInput() {
 
-				reader = new DataFileStream<T>(hdfsResource.getInputStream(), new ReflectDatumReader<T>());
+					@Override
+					public void close() throws IOException {
+						delegate.close();
+					}
+
+					@Override
+					public long tell() throws IOException {
+						return ((Seekable) delegate).getPos();
+					}
+
+					@Override
+					public void seek(long p) throws IOException {
+						((Seekable) delegate).seek(p);
+					}
+
+					@Override
+					public int read(byte[] b, int off, int len) throws IOException {
+						return delegate.read(b, off, len);
+					}
+
+					@Override
+					public long length() throws IOException {
+						return hdfsResource.contentLength();
+					}
+				};
+
+				reader = DataFileReader.openReader(seekableInput, new ReflectDatumReader<T>());
 
 				return reader;
 			}

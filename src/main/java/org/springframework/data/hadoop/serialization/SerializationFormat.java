@@ -37,7 +37,7 @@ public interface SerializationFormat<T> {
 	 * 
 	 * <p>
 	 * Note: The output stream is closed upon {@link SerializationWriter#close() closing} the
-	 * <code>SerializationFormat</code> instance.
+	 * <code>SerializationWriter</code> instance.
 	 * 
 	 * @param output The output stream to write to.
 	 * 

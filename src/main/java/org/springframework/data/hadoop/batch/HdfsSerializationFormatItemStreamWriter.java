@@ -22,13 +22,13 @@ import java.io.IOException;
 import java.util.List;
 
 import org.springframework.batch.item.ExecutionContext;
-import org.springframework.batch.item.ItemStreamException;
 import org.springframework.batch.item.ItemStreamSupport;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.file.ResourceAwareItemWriterItemStream;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.core.io.Resource;
 import org.springframework.data.hadoop.fs.HdfsResource;
+import org.springframework.data.hadoop.serialization.SerializationFormat;
 import org.springframework.data.hadoop.serialization.SerializationWriter;
 import org.springframework.data.hadoop.serialization.SerializationWriterFactoryBean;
 import org.springframework.data.hadoop.serialization.SerializationWriterObjectFactory;

@@ -25,7 +25,7 @@ import java.io.IOException;
  * <p>
  * Instances of this interface are created by {@link SerializationFormat}.
  * 
- * @see {@link SerializationWriter}
+ * @see {@link SerializationReader}
  * 
  * @author Alex Savov
  */

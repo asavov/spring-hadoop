@@ -34,7 +34,7 @@
 	<bean id="swObjectFactory" class="org.springframework.data.hadoop.serialization.SerializationWriterObjectFactory">
 		<constructor-arg ref="hadoopResourceLoader" />
 
-		<property name="serializationFormat" ref="sequenceFileFormat" />
+		<property name="serializationFormat" ref="avroFormat" />
 	</bean>
 
 	<!-- Configure single-step jobs writing to hdfs using different Writers and Completion policies -->
@@ -61,7 +61,7 @@
 
 	<!-- Read objects from HDFS -->
 	<bean id="hdfsItemReader" class="org.springframework.data.hadoop.batch.HdfsSerializationFormatItemReader"
-		p:serializationFormat-ref="sequenceFileFormat" p:location="${hdfs.item.writer.output.dir}hdfsItemWriter"
+		p:serializationFormat-ref="avroFormat" p:location="${hdfs.item.writer.output.dir}hdfsItemWriter"
 		scope="step">
 	</bean>
 
@@ -89,7 +89,7 @@
 
 	<!-- Read objects from HDFS -->
 	<bean id="hdfsItemStreamReader" class="org.springframework.data.hadoop.batch.HdfsSerializationFormatItemReader"
-		p:serializationFormat-ref="sequenceFileFormat" p:location="${hdfs.item.writer.output.dir}hdfsItemStreamWriter"
+		p:serializationFormat-ref="avroFormat" p:location="${hdfs.item.writer.output.dir}hdfsItemStreamWriter"
 		scope="step">
 	</bean>
 
@@ -120,7 +120,7 @@
 		p:locationPattern="${hdfs.item.writer.output.dir}hdfsMultiResourceItemWriter.*" scope="step">
 		<property name="delegate">
 			<bean class="org.springframework.data.hadoop.batch.HdfsSerializationFormatItemReader"
-				p:serializationFormat-ref="sequenceFileFormat" />
+				p:serializationFormat-ref="avroFormat" />
 		</property>
 		<property name="hdfsResourceLoader" ref="hadoopResourceLoader" />
 	</bean>
