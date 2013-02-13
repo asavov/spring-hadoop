@@ -16,6 +16,7 @@
 
 package org.springframework.data.hadoop.serialization;
 
+import java.io.IOException;
 import java.io.OutputStream;
 
 /**
@@ -43,7 +44,7 @@ public interface SerializationFormat<T> {
 	 * 
 	 * @return A Writer that writes to the specified <code>OutputStream</code>.
 	 */
-	SerializationWriter<T> getWriter(OutputStream output);
+	SerializationWriter<T> getWriter(OutputStream output) throws IOException;
 
 	/**
 	 * Creates a serialization reader that reads from the specified location.
@@ -52,7 +53,7 @@ public interface SerializationFormat<T> {
 	 * 
 	 * @return A Reader that reads from the specified location.
 	 */
-	SerializationReader<T> getReader(String location);
+	SerializationReader<T> getReader(String location) throws IOException;
 
 	/**
 	 * Gets the filename extension for this kind of serialization format (such as '.avro', '.seqfile' or '.snappy').

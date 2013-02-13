@@ -109,7 +109,7 @@ public abstract class AbstractSequenceFileFormat<T> extends SerializationFormatS
 	 */
 	protected abstract class AbstractSequenceFileWriter extends SerializationWriterSupport {
 
-		protected FSDataOutputStream fsOutputStream;
+		protected final FSDataOutputStream fsOutputStream;
 
 		/* Native SeqFile writer. */
 		protected SequenceFile.Writer writer;
@@ -179,8 +179,10 @@ public abstract class AbstractSequenceFileFormat<T> extends SerializationFormatS
 		/* Native SeqFile reader. */
 		protected SequenceFile.Reader reader;
 
+		protected final String location;
+
 		protected AbstractSequenceFileReader(String location) {
-			super(location);
+			this.location = location;
 		}
 
 		@Override

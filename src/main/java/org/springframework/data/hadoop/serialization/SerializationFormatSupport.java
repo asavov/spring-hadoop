@@ -19,6 +19,7 @@ import static org.apache.hadoop.io.IOUtils.closeStream;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.OutputStream;
 
 import org.springframework.data.hadoop.fs.HdfsResourceLoader;
 import org.springframework.util.Assert;
@@ -50,6 +51,12 @@ public abstract class SerializationFormatSupport<T> implements SerializationForm
 	// @ Costin: What you think?
 	private HdfsResourceLoader hdfsResourceLoader;
 
+	/* This property is publicly configurable. */
+	protected boolean lazyOpenWriter = false;
+
+	/* This property is publicly configurable. */
+	protected boolean lazyOpenReader = false;
+
 	/**
 	 * Sets the compression alias for the <code>SerializationFormat</code>s created by this class. It's up to the
 	 * implementation to resolve the alias to the actual compression algorithm.
@@ -62,6 +69,32 @@ public abstract class SerializationFormatSupport<T> implements SerializationForm
 
 	protected String getCompressionAlias() {
 		return compressionAlias;
+	}
+
+	/**
+	 * A flag indicating whether to open the writers upon {@link #getWriter(java.io.OutputStream) creation} or lazy-open
+	 * them upon first {@link SerializationWriter#write(Object) write}.
+	 * 
+	 * <p>
+	 * Default value is <code>false</code>.
+	 * 
+	 * @param lazyOpenWriter the lazyOpenWriter to set
+	 */
+	public void setLazyOpenWriter(boolean lazyOpenWriter) {
+		this.lazyOpenWriter = lazyOpenWriter;
+	}
+
+	/**
+	 * A flag indicating whether to open the readers upon {@link #getReader(String) creation} or lazy-open them upon
+	 * first {@link SerializationReader#read() read}.
+	 * 
+	 * <p>
+	 * Default value is <code>false</code>.
+	 * 
+	 * @param lazyOpenReader the lazyOpenReader to set
+	 */
+	public void setLazyOpenReader(boolean lazyOpenReader) {
+		this.lazyOpenReader = lazyOpenReader;
 	}
 
 	/**
@@ -101,9 +134,46 @@ public abstract class SerializationFormatSupport<T> implements SerializationForm
 	 * @return the hdfsResourceLoader
 	 */
 	protected HdfsResourceLoader getHdfsResourceLoader() {
-		Assert.notNull(hdfsResourceLoader, "A non-null HdfsResourceLoader is required.");		
+		Assert.notNull(hdfsResourceLoader, "A non-null HdfsResourceLoader is required.");
 		return hdfsResourceLoader;
 	}
+
+	@Override
+	public SerializationWriter<T> getWriter(OutputStream output) throws IOException {
+
+		SerializationWriterSupport writer = createWriter(output);
+
+		if (!lazyOpenWriter) {
+			writer.open();
+		}
+
+		return writer;
+	}
+
+	@Override
+	public SerializationReader<T> getReader(String location) throws IOException {
+
+		// TODO: Extract to utility class and do not couple to SerializationWriterObjectFactory!
+		location = SerializationWriterObjectFactory.canonicalSerializationDestination(this, location);
+
+		SerializationReaderSupport reader = createReader(location);
+
+		if (!lazyOpenReader) {
+			reader.open();
+		}
+
+		return reader;
+	}
+
+	/**
+	 * Should be implemented by descendant classes. Used by core {@link #getWriter(OutputStream)} method.
+	 */
+	protected abstract SerializationWriterSupport createWriter(OutputStream output);
+
+	/**
+	 * Should be implemented by descendant classes. Used by core {@link #getReader(String)} method.
+	 */
+	protected abstract SerializationReaderSupport createReader(String location);
 
 	/**
 	 * A template class to be extended by <code>SerializationFormatWriter</code> implementations. Descendants should
@@ -113,13 +183,14 @@ public abstract class SerializationFormatSupport<T> implements SerializationForm
 
 		/**
 		 * <ul>
-		 * <li>Lazy open the writer upon first write.</li>
+		 * <li>Lazy open the Writer upon first write (if not already opened).</li>
 		 * <li>Delegate to {@link #doWrite(Object) core} serialization logic.</li>
 		 * </ul>
 		 */
 		@Override
 		public void write(T source) throws IOException {
 
+			// Lazy open serialization writer upon first write (if not already opened)
 			open();
 
 			// Delegate to core serialization logic.
@@ -139,16 +210,9 @@ public abstract class SerializationFormatSupport<T> implements SerializationForm
 	 */
 	protected abstract class SerializationReaderSupport extends OpenCloseSupport implements SerializationReader<T> {
 
-		protected final String location;
-
-		protected SerializationReaderSupport(String location) {
-			// TODO: Extract to utility class and do not couple to SerializationWriterObjectFactory!
-			this.location = SerializationWriterObjectFactory.canonicalSerializationDestination(SerializationFormatSupport.this, location);
-		}
-		
 		/**
 		 * <ul>
-		 * <li>Lazy open the Reader upon first read.</li>
+		 * <li>Lazy open the Reader upon first read (if not already opened).</li>
 		 * <li>Delegate to {@link #doRead() core} deserialization logic.</li>
 		 * <li>Auto-close the Reader if read object is <code>null</code>.</li>
 		 * </ul>
@@ -156,7 +220,7 @@ public abstract class SerializationFormatSupport<T> implements SerializationForm
 		@Override
 		public T read() throws IOException {
 
-			// Lazy open serialization format upon first read
+			// Lazy open serialization reader upon first read (if not already opened)
 			open();
 
 			// Delegate to core serialization
@@ -179,7 +243,7 @@ public abstract class SerializationFormatSupport<T> implements SerializationForm
 	/**
 	 * Open-Close utility class used by Readers and Writers.
 	 */
-	protected abstract class OpenCloseSupport implements Closeable {
+	protected static abstract class OpenCloseSupport implements Closeable {
 
 		/* Indicates whether this serialization format has been opened. */
 		protected boolean isOpen = false;

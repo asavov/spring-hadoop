@@ -53,8 +53,7 @@ public abstract class CompressionUtils {
 	 * @throws RuntimeException if the codec class could not be instantiated
 	 */
 	public static CompressionCodec getHadoopCompression(Configuration conf, String compressionAlias) {
-
-		if (!StringUtils.hasText(compressionAlias)) {
+		if (!StringUtils.hasText(compressionAlias) || "none".equalsIgnoreCase(compressionAlias)) {
 			return null;
 		}
 
@@ -89,8 +88,10 @@ public abstract class CompressionUtils {
 	 * @throws AvroRuntimeException if such a codec does not exist
 	 */
 	public static CodecFactory getAvroCompression(String compressionAlias) {
-		return StringUtils.hasText(compressionAlias) ? CodecFactory.fromString(compressionAlias) : CodecFactory
-				.nullCodec();
+		if (!StringUtils.hasText(compressionAlias) || "none".equalsIgnoreCase(compressionAlias)) {
+			return CodecFactory.nullCodec();
+		}
+		return CodecFactory.fromString(compressionAlias);
 	}
 
 }

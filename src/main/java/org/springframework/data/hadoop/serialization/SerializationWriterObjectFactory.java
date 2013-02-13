@@ -20,6 +20,7 @@ import static org.springframework.util.StringUtils.hasText;
 import java.io.IOException;
 import java.io.OutputStream;
 
+import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.data.hadoop.HadoopException;
 import org.springframework.data.hadoop.fs.HdfsResource;
@@ -102,7 +103,7 @@ public class SerializationWriterObjectFactory implements ObjectFactory<Serializa
 	 * @return SerializationFormat instance which writes either to HDFS {@link HdfsResource resource} or HDFS path.
 	 */
 	@Override
-	public SerializationWriter<?> getObject() {
+	public SerializationWriter<?> getObject() throws BeanCreationException {
 
 		Assert.notNull(serializationFormat, "A non-null SerializationFormat is required.");
 
@@ -120,7 +121,11 @@ public class SerializationWriterObjectFactory implements ObjectFactory<Serializa
 			Assert.state(false, "Set either 'destinationPath' or 'destinationResource' property.");
 		}
 
-		return serializationFormat.getWriter(outputStream);
+		try {
+			return serializationFormat.getWriter(outputStream);
+		} catch (IOException ioExc) {
+			throw new BeanCreationException("Unable to create SerializationWriter.", ioExc);
+		}
 	}
 
 	/**

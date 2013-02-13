@@ -23,7 +23,6 @@ import java.io.OutputStream;
 
 import org.apache.avro.Schema;
 import org.apache.avro.file.DataFileReader;
-import org.apache.avro.file.DataFileStream;
 import org.apache.avro.file.DataFileWriter;
 import org.apache.avro.file.FileReader;
 import org.apache.avro.file.SeekableInput;
@@ -53,7 +52,7 @@ public class AvroFormat<T> extends SerializationFormatSupport<T> {
 	/**
 	 * Writes POJOs using <code>Avro</code> serialization.
 	 */
-	public SerializationWriter<T> getWriter(final OutputStream output) {
+	protected SerializationWriterSupport createWriter(final OutputStream output) {
 
 		return new SerializationWriterSupport() {
 
@@ -94,9 +93,9 @@ public class AvroFormat<T> extends SerializationFormatSupport<T> {
 	 * Reads POJOs using <code>Avro</code> serialization.
 	 */
 	@Override
-	public SerializationReader<T> getReader(String location) {
+	protected SerializationReaderSupport createReader(final String location) {
 
-		return new SerializationReaderSupport(location) {
+		return new SerializationReaderSupport() {
 
 			/* Native Avro reader. */
 			FileReader<T> reader;
@@ -106,7 +105,7 @@ public class AvroFormat<T> extends SerializationFormatSupport<T> {
 
 				final Resource hdfsResource = getHdfsResourceLoader().getResource(location);
 				final InputStream delegate = hdfsResource.getInputStream();
-				
+
 				/*
 				 * Adapts Hadoop FSDataInputStream and CompressionInputStream to Avro SeekableInput.
 				 * 

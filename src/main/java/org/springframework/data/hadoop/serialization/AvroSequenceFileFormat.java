@@ -60,7 +60,7 @@ public class AvroSequenceFileFormat<T> extends AbstractSequenceFileFormat<T> {
 	 * Writes POJOs in <code>Avro</code> schema using Hadoop {@link SequenceFile} serialization framework.
 	 */
 	@Override
-	public SerializationWriter<T> getWriter(OutputStream output) {
+	protected SerializationWriterSupport createWriter(OutputStream output) {
 
 		return new AbstractSequenceFileWriter(output) {
 
@@ -104,7 +104,7 @@ public class AvroSequenceFileFormat<T> extends AbstractSequenceFileFormat<T> {
 	 * Reads POJOs in <code>Avro</code> schema using Hadoop {@link SequenceFile} serialization framework.
 	 */
 	@Override
-	public SerializationReader<T> getReader(String location) {
+	protected SerializationReaderSupport createReader(String location) {
 
 		return new AbstractSequenceFileReader(location) {
 

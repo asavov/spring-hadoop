@@ -67,7 +67,7 @@ public class ResourceSerializationFormat extends SerializationFormatSupport<Reso
 	 * Writes the content of Spring {@link Resource}s to a single HDFS location.
 	 */
 	@Override
-	public SerializationWriter<Resource> getWriter(final OutputStream output) {
+	protected SerializationWriterSupport createWriter(final OutputStream output) {
 		// Extend and customize Serialization Writer template
 		return new SerializationWriterSupport() {
 
@@ -119,9 +119,9 @@ public class ResourceSerializationFormat extends SerializationFormatSupport<Reso
 	 * Reads the content of the HDFS resource at specified location.
 	 */
 	@Override
-	public SerializationReader<Resource> getReader(String location) {
+	protected SerializationReaderSupport createReader(final String location) {
 		// Extend and customize Serialization Reader template
-		return new SerializationReaderSupport(location) {
+		return new SerializationReaderSupport() {
 
 			private boolean isRead = false;
 

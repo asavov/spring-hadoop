@@ -54,7 +54,7 @@ public class SequenceFileFormat<T> extends AbstractSequenceFileFormat<T> {
 	 * Sequence file serialization format writer.
 	 */
 	@Override
-	public SerializationWriter<T> getWriter(OutputStream output) {
+	protected SerializationWriterSupport createWriter(OutputStream output) {
 
 		return new AbstractSequenceFileWriter(output) {
 
@@ -84,7 +84,7 @@ public class SequenceFileFormat<T> extends AbstractSequenceFileFormat<T> {
 	 * Sequence file serialization format reader.
 	 */
 	@Override
-	public SerializationReader<T> getReader(String location) {
+	protected SerializationReaderSupport createReader(String location) {
 
 		return new AbstractSequenceFileReader(location) {
 
