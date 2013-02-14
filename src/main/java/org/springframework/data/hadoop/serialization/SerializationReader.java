@@ -31,6 +31,33 @@ import java.io.IOException;
  */
 public interface SerializationReader<T> extends Closeable {
 
+	/**
+	 * Optional interface that might be implemented by <code>SerializationReader</code> that support sync marks.
+	 */
+	public static interface MarkSupport {
+
+		/**
+		 * Returns the position of last past sync mark.
+		 */
+		long lastMark() throws IOException;
+
+		/**
+		 * Positions the reader to a specified sync mark position.
+		 */
+		void gotoMark(long markPosition) throws IOException;
+
+		/**
+		 * The {@link SerializationReader#read() read} of a record might change the last sync mark. This method provides
+		 * information whether the sync mark was located before or after that record. This is usefull if the client
+		 * wants to keep track of items after last sync mark.
+		 * 
+		 * @return <code>true</code> if the sync mark is located before the record; <code>false</code> if the sync mark
+		 * is located after the record.
+		 */
+		boolean isMarkAtRecordStart() throws IOException;
+
+	}
+
 	T read() throws IOException;
 
 }

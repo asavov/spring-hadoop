@@ -170,7 +170,8 @@ public abstract class AbstractSequenceFileFormat<T> extends SerializationFormatS
 	 * 
 	 * @see {@link SequenceFile.Reader}
 	 */
-	protected abstract class AbstractSequenceFileReader extends SerializationReaderSupport {
+	protected abstract class AbstractSequenceFileReader extends SerializationReaderSupport implements
+			SerializationReader.MarkSupport {
 
 		// Re-used objects passed to underlying SeqFile reader.
 		protected final Object KEY_TO_REUSE = null;
@@ -178,6 +179,8 @@ public abstract class AbstractSequenceFileFormat<T> extends SerializationFormatS
 
 		/* Native SeqFile reader. */
 		protected SequenceFile.Reader reader;
+
+		protected long lastMark = -1;
 
 		protected final String location;
 
@@ -191,6 +194,12 @@ public abstract class AbstractSequenceFileFormat<T> extends SerializationFormatS
 			reader = new SequenceFile.Reader(getHdfsResourceLoader().getFileSystem(), new Path(location),
 					getConfiguration());
 
+			lastMark = reader.getPosition();
+
+			/*
+			 * System.out.printf(">>> [SeqFileReader.doOpen] lm=%s%s\n", lastMark, (reader.syncSeen() ? "*" : ""));
+			 */
+
 			return reader;
 		}
 
@@ -201,8 +210,53 @@ public abstract class AbstractSequenceFileFormat<T> extends SerializationFormatS
 		 */
 		@Override
 		protected T doRead() throws IOException {
+
+			long beforeReadPosition = reader.getPosition();
+
 			// SeqFile.key is skipped. Return SeqFile.value.
-			return reader.next(KEY_TO_REUSE) != null ? getValue(reader.getCurrentValue(VALUE_TO_REUSE)) : null;
+			T read = reader.next(KEY_TO_REUSE) != null ? getValue(reader.getCurrentValue(VALUE_TO_REUSE)) : null;
+
+			long afterReadPosition = reader.getPosition();
+
+			if (reader.syncSeen()) {
+				if (isMarkAtRecordStart()) {
+					lastMark = beforeReadPosition;
+				} else {
+					lastMark = afterReadPosition;
+				}
+			}
+
+			/*
+			 * System.out.printf(">>> [SeqFileReader.doRead] [lm=%s] [%s-%s%s]\t%s\n", lastMark, beforeReadPosition,
+			 * afterReadPosition, (reader.syncSeen() ? "*" : ""), read);
+			 */
+
+			return read;
+		}
+
+		@Override
+		public long lastMark() {
+			return lastMark;
+		}
+
+		@Override
+		public void gotoMark(long markPosition) throws IOException {
+
+			open();
+
+			reader.seek(markPosition);
+
+			lastMark = markPosition;
+
+			System.out.println(">>> [SeqFileReader.gotoMark] lm = " + lastMark);
+		}
+
+		@Override
+		public boolean isMarkAtRecordStart() throws IOException {
+
+			open();
+
+			return reader.isBlockCompressed();
 		}
 
 		/**
