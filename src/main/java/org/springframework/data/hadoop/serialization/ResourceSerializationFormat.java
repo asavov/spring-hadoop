@@ -18,6 +18,7 @@ package org.springframework.data.hadoop.serialization;
 import static org.apache.hadoop.io.IOUtils.closeStream;
 import static org.apache.hadoop.io.IOUtils.copyBytes;
 
+import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
@@ -38,12 +39,15 @@ import org.springframework.util.Assert;
  * 
  * @author Alex Savov
  */
-// TODO: Maybe add support for write/read of MULTIPLE small files using Avro/SeqFile format.
-// TODO: The contract of the class MUST be cleared! @Costin: any ideas?
 public class ResourceSerializationFormat extends SerializationFormatSupport<Resource> implements InitializingBean {
+
+	private static final String DEFAULT_LINE_SEPARATOR = System.getProperty("line.separator");
 
 	/* This property is publicly configurable. */
 	private Configuration configuration;
+
+	/* This property is publicly configurable. */
+	private String resourceSeparator = DEFAULT_LINE_SEPARATOR;
 
 	/**
 	 * Sets the Hadoop configuration for this <code>SerializationFormat</code>.
@@ -56,6 +60,20 @@ public class ResourceSerializationFormat extends SerializationFormatSupport<Reso
 
 	protected Configuration getConfiguration() {
 		return configuration;
+	}
+
+	/**
+	 * Sets the resource separator to use while writing. <code>null</code> means no separator between resources.
+	 * Defaults to the System property <code>line.separator</code>.
+	 * 
+	 * @param resourceSeparator the resource separator to set
+	 */
+	public void setResourceSeparator(String resourceSeparator) {
+		this.resourceSeparator = resourceSeparator;
+	}
+
+	protected String getResourceSeparator() {
+		return resourceSeparator;
 	}
 
 	@Override
@@ -73,8 +91,13 @@ public class ResourceSerializationFormat extends SerializationFormatSupport<Reso
 
 			private OutputStream outputStream = output;
 
+			private InputStream resourceSeparatorInputStream;
+
 			@Override
 			protected Closeable doOpen() throws IOException {
+
+				resourceSeparatorInputStream = null;
+
 				CompressionCodec codec = CompressionUtils.getHadoopCompression(getConfiguration(),
 						getCompressionAlias());
 
@@ -94,6 +117,7 @@ public class ResourceSerializationFormat extends SerializationFormatSupport<Reso
 
 					@Override
 					public void close() throws IOException {
+						resourceSeparatorInputStream = null;
 						IOUtils.closeStream(outputStream);
 						CodecPool.returnCompressor(compressor);
 					}
@@ -104,13 +128,36 @@ public class ResourceSerializationFormat extends SerializationFormatSupport<Reso
 			protected void doWrite(Resource source) throws IOException {
 				InputStream inputStream = null;
 				try {
+					writeSeparator();
+
 					inputStream = source.getInputStream();
 
 					// Write source to HDFS destination
 					copyBytes(inputStream, outputStream, getConfiguration(), /* close */false);
+
 				} finally {
 					closeStream(inputStream);
 				}
+			}
+
+			protected void writeSeparator() throws IOException {
+				if (getResourceSeparator() == null) {
+					return;
+				}
+
+				if (resourceSeparatorInputStream == null) {
+
+					// First call inits 'resourceSeparatorInputStream' and does not write anything
+
+					resourceSeparatorInputStream = new ByteArrayInputStream(getResourceSeparator().getBytes("UTF-8"));
+
+					return;
+				}
+
+				resourceSeparatorInputStream.reset();
+
+				// Write resource separator to HDFS destination
+				copyBytes(resourceSeparatorInputStream, outputStream, getConfiguration(), /* close */false);
 			}
 		};
 	}
@@ -123,7 +170,7 @@ public class ResourceSerializationFormat extends SerializationFormatSupport<Reso
 		// Extend and customize Serialization Reader template
 		return new SerializationReaderSupport() {
 
-			private boolean isRead = false;
+			private boolean isRead;
 
 			@Override
 			protected Closeable doOpen() throws IOException {
@@ -148,7 +195,7 @@ public class ResourceSerializationFormat extends SerializationFormatSupport<Reso
 
 	/**
 	 * @return compression default {@link CompressionCodec#getDefaultExtension() extension} if compression alias is
-	 * specified. <code>empty</code> string otherwise.
+	 * specified; <code>empty</code> string otherwise.
 	 */
 	@Override
 	protected String getDefaultExtension() {
