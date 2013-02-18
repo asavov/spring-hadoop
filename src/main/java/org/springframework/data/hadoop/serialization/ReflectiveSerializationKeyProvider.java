@@ -89,7 +89,7 @@ public class ReflectiveSerializationKeyProvider extends ReflectivePropertyAccess
 	 * is not supported by this provider.
 	 */
 	public Class<?> getKeyClass(Class<?> objectClass) {
-		return (this.objectClass == objectClass) ? keyDescriptor.getObjectType() : null;
+		return (this.objectClass.isAssignableFrom(objectClass)) ? keyDescriptor.getObjectType() : null;
 	}
 
 	/**

@@ -18,7 +18,8 @@ package org.springframework.data.hadoop.serialization;
 import static org.apache.hadoop.io.IOUtils.closeStream;
 import static org.apache.hadoop.io.IOUtils.copyBytes;
 
-import java.io.ByteArrayInputStream;
+import static org.apache.commons.io.IOUtils.toInputStream;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,7 +36,8 @@ import org.springframework.core.io.Resource;
 import org.springframework.util.Assert;
 
 /**
- * An implementation of {@link SerializationFormat} which serializes Spring {@link Resource}s to HDFS.
+ * An implementation of {@link SerializationFormat} which serializes Spring {@link Resource}s to HDFS. The resources are
+ * written to a single HDFS destination and are read as a single aggregated resource.
  * 
  * @author Alex Savov
  */
@@ -149,7 +151,7 @@ public class ResourceSerializationFormat extends SerializationFormatSupport<Reso
 
 					// First call inits 'resourceSeparatorInputStream' and does not write anything
 
-					resourceSeparatorInputStream = new ByteArrayInputStream(getResourceSeparator().getBytes("UTF-8"));
+					resourceSeparatorInputStream = toInputStream(getResourceSeparator(), "UTF-8");
 
 					return;
 				}
